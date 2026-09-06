@@ -1,0 +1,33 @@
+{
+  "python": "3.14.0",
+  "numpy": "2.3.5",
+  "scipy": "1.16.3",
+  "static_equal_arm_sinusoidal_laser": {
+    "X1": {
+      "max_abs_interior": 3.34477023813709e-28,
+      "max_abs_full": 2.092105401309438e-09
+    },
+    "X2": {
+      "max_abs_interior": 4.985600920996795e-28,
+      "max_abs_full": 1.2524067589105532e-08
+    }
+  },
+  "gw_helper_vs_main": {
+    "helper": 2.5208915015509467e-21,
+    "main": 8.339759519692649e-24
+  },
+  "instantaneous_vs_retarded_seconds": {
+    "3": {
+      "instantaneous": 10.135072138876277,
+      "retarded_flat_spacetime": 10.13557653482281,
+      "difference_seconds": 0.0005043959465336201,
+      "difference_meters": 151212.86081131396
+    },
+    "-3": {
+      "instantaneous": 10.135072138876277,
+      "retarded_flat_spacetime": 10.134567819887424,
+      "difference_seconds": -0.0005043189888525035,
+      "difference_meters": -151189.789668092
+    }
+  }
+}

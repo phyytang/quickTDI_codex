@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quicktdi"
+version = "0.1.0"
+description = "Taiji/LISA TDI simulation utilities"
+readme = "AGENTS.md"
+requires-python = ">=3.9"
+dependencies = [
+  "matplotlib",
+  "numpy",
+  "scipy",
+]
+
+[project.scripts]
+quicktdi-dashboard = "TJ_dashboard:main"
+
+[project.optional-dependencies]
+inference = ["dynesty"]
+
+[tool.setuptools]
+package-dir = {"" = "src", "utils" = "utils"}
+py-modules = [
+  "TJ_dashboard",
+  "TJ_Triangle",
+  "TJ_constant",
+  "TJ_freplan",
+  "TJ_gw",
+  "TJ_lock",
+  "TJ_noise",
+  "TJ_ob",
+  "TJ_orbit",
+  "TJ_synthesis",
+  "TJ_tdi",
+]
+packages = ["utils"]

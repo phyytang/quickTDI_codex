@@ -1,0 +1,3430 @@
+
+--- PAGE 1 ---
+Unified model for the LISA measurements and instrument simulations
+Jean-Baptiste Bayle 1,* and Olaf Hartwig 2,3
+1University of Glasgow, Glasgow G12 8QQ, United Kingdom
+2SYRTE, Observatoire de Paris, Universit´ e PSL, CNRS, Sorbonne Universit´ e,
+LNE, 61 avenue de l ’Observatoire, 75014 Paris, France
+3Max-Planck-Institut für Gravitationsphysik (Albert-Einstein-Institut),
+Callinstraße 38, 30167 Hannover, Germany
+(Received 13 December 2022; accepted 17 March 2023; published 11 April 2023)
+LISA is a space-based mHz gravitational-wave observatory, with a planned launch in 2034. It is expected
+to be the first detector of its kind, and will present unique challenges in instrumentation and data analysis.
+An accurate preflight simulation of LISA data is a vital part of the development of both the instrument and
+the analysis methods. The simulation must include a detailed model of the full measurement and analysis
+chain, capturing the main features that affect the instrument performance and processing algorithms. Here,
+we propose a new model that includes, for the first time, proper relativistic treatment of reference frames
+with realistic orbits, a model for onboard clocks and clock synchronization measurements, proper modeling
+of total laser frequencies (including laser locking), frequency planning and Doppler shifts, better treatment
+of onboard processing, and updated noise models. We then introduce two implementations of this model,
+LISANode and LISA Instrument. We demonstrate that TDI processing successfully recovers gravitational-wave
+signals from the significantly more realistic and complex simulated data. LISANode and LISA I nstrument are
+already widely used by the LISA community and, for example, currently provide the mock data for the
+LISA data challenges.
+DOI: 10.1103/PhysRevD.107.083019
+I. INTRODUCTION
+Following the opening of the gravitational Universe by
+the many observations of ground-based gravitational-wave
+detectors [1–15], the European Space Agency (ESA) has
+selected the Laser Interferometer Space Antenna (LISA) as
+the L3 mission. LISA is a space-borne gravitational-wave
+observatory sensitive to gravitational signals between
+0.1 mHz and 1 Hz, where we expect a large diversity of
+sources, ranging from supermassive black-hole binaries,
+quasimonochromatic Galactic binaries, extreme mass-ratio
+inspirals, and stellar-mass binaries [16]. In addition to these
+expected sources, a number of potential signals might be
+detected, including stochastic gravitational-wave signals
+from the early Universe, cusps and kinks of cosmic strings
+and other unmodeled burst sources. Precise measurements
+of the source parameters will help answer many astro-
+physical and cosmological questions, as well as constrain
+models beyond the general theory of relativity.
+Achieving these outstanding science objectives will
+present challenges in both instrumentation and data analy-
+sis. Contrary to ground-based gravitational-wave observa-
+tories, LISA is expected to be signal dominated, with tens
+of thousands of sources of different kind present in the
+LISA band at all times. Telling all of these sources apart
+and estimating their parameters requires novel approaches
+to data analysis (explored in the context of the LISA data
+challenges), the development and testing of which neces-
+sitates realistic simulated data. In addition, LISA will make
+use of sophisticated noise-reduction algorithms to reject the
+most dominant instrumental-noise sources. The core of
+these algorithms is known as time-delay interferometry
+(TDI), in which multiple data streams are combined with
+appropriate time shifts to generate virtual equal-arm inter-
+ferometers in postprocessing. Understanding how different
+noise sources couple into the data is crucial to guide the
+development of such noise-reduction pipelines. Finally,
+with a planned launch in 2034, the LISA mission is
+currently preparing for adoption. The development of a
+simulation model is needed to support these activities,
+validate the instrument design and ensure that the science
+objectives can be achieved.
+To fulfill these objectives, one needs to capture in the
+simulation model the main features that affect the instrument
+performance and processing algorithms. The simulated data
+*j2b.bayle@gmail.com
+Published by the American Physical Society under the terms of
+the Creative Commons Attribution 4.0 International license.
+Further distribution of this work must maintain attribution to
+the author(s) and the published article ’s title, journal citation,
+and DOI.
+PHYSICAL REVIEW D 107, 083019 (2023)
+2470-0010=2023=107(8)=083019(31) 083019-1 Published by the American Physical Society
+--- PAGE 2 ---
+should be representative of the time series we will receive
+from the real instrument. Therefore, we focus in this paper on
+a time-domain instrument model. In addition, we must be
+able to simulate several years of data in a reasonable time to
+evaluate different instrument configurations for full mission
+duration, currently planned as 4 years [16]; this makes a
+detailed engineering-level simulation unfeasible.
+This instrument model builds on a legacy of previous
+constellation-level LISA simulators.
+LISA S imulator was
+developed to quickly generate measurement data [17,18].
+The simulator worked exclusively in the frequency domain
+and was based on transfer functions for a simple instru-
+mental model.
+Synthetic LISA was a Python-based simulator
+that worked in the time domain and used an idealized (and
+now out-of-date) instrumental configuration to study the
+performance of noise reduction algorithms for a constella-
+tion with time-varying arm lengths [19].
+TDISim was a
+prototype TDI simulation tool programmed in MA TLAB.
+The simulation fully operated in the time domain and
+performed both data generation and TDI, including for the
+first time the updated split-interferometry optical bench
+design and a simplified state-space model for the motion of
+the test mass and the spacecraft [20].
+We based our simulation efforts on
+LISACode, which was
+initiated with the similar ambition to include most of the
+ingredients that were thought to influence LISA ’s perfor-
+mance at the time [21]. Since then, developments in the
+instrument and mission design revealed new important
+effects that must be included in the simulations. The model
+that we propose in this paper is an attempt to extend
+LISACode’s model to capture those effects.
+Section II introduces the conventions we use, and, for
+the first time, a description of the time frames relevant for
+LISA I nstrument simulations. In Sec. III, we describe the
+optical simulation model, which includes the up-to-date
+split-interferometry optical bench design. Contrary to
+previous simulators, we properly model the total laser
+frequencies, as well as realistic orbits and any Doppler
+effects arising from differential spacecraft motion. We
+also account for the sideband modulations used to correct
+for clock errors. Then, we describe in Sec. IV the readout
+of the interferometric beatnotes and how it is affected by
+imperfections of onboard clocks. Our treatment of the
+onboard processing is presented in Sec. V; here, we also
+give the equations for the final phasemeter readouts.
+In Sec. VI, we describe how we model laser locking,
+and its impact on the measurements. Lastly, in Sec. VII,
+we give a high-level model of the pseudoranging mea-
+surements that are used to estimate the arm lengths. We
+then introduce
+LISANode and LISA I nstrument,t w oi m p l e -
+mentations of this simulation model, and discuss their
+performances in Sec. VIII. Finally, in Sec. IX,w es h o w
+simulation results and highlight the main features that
+differ from previously simulated data. We demonstrate
+that despite the added complexity, we can recover
+gravitational signals using the latest noise-reduction
+algorithms. We conclude in Sec. X.
+II. FRAMEWORK AND CONVENTIONS
+A. Constellation overview
+LISA is an almost equilateral triangle, composed of three
+identical spacecraft, which we label 1, 2, 3 clockwise when
+looking down at their solar panels. These spacecraft
+exchange laser beams, which are combined on optical
+benches inside movable optical subassemblies (MOSAs).
+To uniquely label these MOSAs, we use two indices. The
+first one is that of the spacecraft the MOSA is mounted,
+while the second index is that of the spacecraft the MOSA
+is pointing to. Most components of interest (such as the
+optical benches, test masses, etc.) can be uniquely asso-
+ciated to one of the MOSAs, in which case we use the same
+two indices. Elements that exist only once onboard a
+spacecraft, such as the ultrastable oscillators (USOs), are
+indexed by that spacecraft index. These labeling conven-
+tions, which are largely based on the proposed unified
+conventions of the LISA consortium [22], are summarized
+in Fig. 1.
+Quantities that describe a process that involves the
+propagation between two spacecraft will be interpreted
+as being associated with the spacecraft in which the
+quantity is measured. For example, the gravitational-wave
+signal observed in the interferometer on MOSA 12 will be
+indexed with the same indices 12. The same convention
+applies to the propagation delay of a beam arriving on
+spacecraft 1 from spacecraft 2, which will be labeled by the
+indices 12.
+In this paper, we often derive equations for a specific
+spacecraft or MOSA. The expressions for the other 2
+spacecraft or the other 5 MOSAs can then be deduced by
+SC 1SC 2
+SC 3
+MOSA 31
+MOSA 13
+MOSA 12MOSA 21
+MOSA 23
+MOSA 32
+D 32  
+D 12  
+ D 23
+D 13  
+ D 31
+ D 21
+FIG. 1. Labeling conventions used for spacecraft, light travel
+times, lasers, MOSAs, and interferometric measurements
+(from [23]).
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-2
+--- PAGE 3 ---
+combining cyclic permutations f1 → 2; 2 → 3; 3 → 1g,
+and reflections f1 → 1; 2 → 3; 3 → 2g.
+B. Time-coordinate frames
+The instrumental simulation mostly concerns itself with
+the physics inside a spacecraft (e.g., the evolution of laser
+beam phases and their interferometric beatnotes), which is
+best modeled in the three spacecraft proper time (TPS).
+These time frames are defined as the times shown by
+perfect clocks comoving with the spacecraft centers of
+mass. We denote them with τ
+1, τ2, and τ3.
+The spacecraft proper times (TPSs) are idealized time-
+scales, which cannot be realized in practice. All measure-
+ments instead refer to an imperfect on-board timer, which
+represents an approximation of the associated TPS. We
+denote these three onboard clock time frames as ˆτ
+1, ˆτ2,
+and ˆτ3.
+Finally, processes on the Solar-System scale are modeled
+according to a global time frame, such as the barycentric
+coordinate time (TCB), denoted t. This is the case for the
+spacecraft orbits or the gravitational waveforms. Our
+instrumental simulation does not make a direct use of
+the barycentric coordinate time. Instead, we rely on
+external tools, such as
+LISA O rbits [24], to directly compute
+quantities expressed in the TPSs.
+In general, signals are expressed in their natural time
+coordinate. E.g., laser beam phases and beatnotes are
+expressed in the TPS of the spacecraft housing the laser.
+It is sometimes useful to express a signal in a different time
+coordinate. To prevent confusion, we will use the same
+symbol but add a superscript denoting the time coordinate.
+For example, a phase ϕ could be expressed as a function of
+the TPS 1, writing ϕ
+τ1 ðxÞ, or as a function of the clock time
+of that spacecraft, writing ϕ ˆτ1 ðxÞ. Note that the symbol used
+for the function argument is arbitrary, and does not specify
+the reference frame. We will often use τ without subscripts
+as a generic function argument.
+Conversions between time coordinates can easily be
+expressed with these conventions. For example, τ
+ˆτ1
+1 ðτÞ is
+the TPS as a function of the clock time onboard spacecraft
+1. Trivially,
+ttðτÞ¼ ττ1
+1 ðτÞ¼ ˆτˆτ1
+1 ðτÞ¼ τ: ð1Þ
+It is often useful to model the deviation of the onboard
+clock time with respect to the associated TPS. We adopt the
+notation
+τˆτ1
+1 ðτÞ¼ τ þ δτˆτ1
+1 ðτÞ; ð2aÞ
+ˆττ1
+1 ðτÞ¼ τ þ δˆττ1
+1 ðτÞ: ð2bÞ
+One important class of signals we study are phases ϕ of
+electromagnetic waves. As scalar quantities, these are
+invariant under coordinate transformations, such that they
+transform from one time frame to another using a simple
+time shift,
+ϕ τ1 ðτÞ¼ ϕ ˆτ1 ðˆττ1
+1 ðτÞÞ: ð3Þ
+III. OPTICAL SIMULATION
+In this section, we derive the model for the generation
+and propagation of the laser beams, as well as their
+interference at the photodiodes.
+A. Optical-bench design
+As illustrated in Fig. 1, each spacecraft hosts two optical
+benches. We usually refer to one optical bench as the local
+optical bench; the other optical bench hosted by the same
+spacecraft as the adjacent optical bench; we call the distant
+optical bench the one situated on the spacecraft exchanging
+light with the local optical bench. Each optical bench is
+associated with a laser source, a gravitational reference
+sensor (GRS) containing a free-falling test mass, and
+telescope to send and collect light to and from distant
+spacecraft.
+Laser beams are combined in three different heterodyne
+interferometers. The interspacecraft interferometer (ISI)
+mixes the local beam with the distant beam (coming from
+the distant optical bench) and the test-mass interferometer
+(TMI) mixes the local and adjacent beams, after it has
+bounced on the local test mass; and the reference interfer-
+ometer (RFI) mixes the local and adjacent beams without
+interaction with the test mass. Fig. 2 gives an overview of
+the optical bench 12.
+In reality, each single interferometer output is imple-
+mented using redundant balanced detection with four
+quadrant photodiodes (QPDs). We do not simulate bal-
+anced detection, and only consider a single data stream for
+each interferometer. Additional readouts related to the laser
+FIG. 2. Schematics of the optical design implemented in the
+simulation, along with notations for the laser beam and beatnote
+total phases, here for MOSA 12.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-3
+--- PAGE 4 ---
+beams alignment, such as the differential wave front
+sensing (DWS), are not included in the model presented
+here. We are currently working to implement them in the
+simulation by propagating additional independent variables
+representing the different beam tilts. We plan to describe
+this model in more detail in a follow-up paper.
+B. Laser-beam model
+1. Simple laser beam
+We use a number of assumptions to model the informa-
+tion carried by the electromagnetic field of a laser beam
+(in all generality, these are two 3-vector fields).
+We work in the plane-wave approximation, and assume
+that any effects due to wave front imperfections can be
+modeled as equivalent longitudinal path length variations.
+In addition, we neglect effects related to the fields polari-
+zation, and assume that the waves propagate in a perfect
+vacuum, such that we only model the scalar electric field
+amplitude (we do not model the magnetic field amplitude,
+as it is completely determined by the electrical field
+amplitude [25]).
+At any fixed point inside a spacecraft, the complex
+amplitude of the electromagnetic field associated with a
+laser beam can be written as
+EðτÞ¼ E
+0ðτÞei2πΦðτÞ; ð4Þ
+where ΦðτÞ is the total phase in units of cycles.
+LISA ultimately measures phase differences, such that
+we do not simulate the field amplitude term E0, but only the
+phase ΦðτÞ. We expect couplings between the field
+amplitude and the measured phase difference (e.g., the
+relative intensity noise [26]). We currently do not model
+these effects, but assume that they can be modeled as
+equivalent phase noise in the final readout.
+2. Phase or frequency?
+The optical frequency of the lasers is around
+ν
+0 ¼ 281.6 THz, such that the total phase increases quickly
+with time. This makes using it challenging for numerical
+simulations, as any variable representing the total phase
+will either numerically overflow when using fixed-point
+arithmetic, or eventually suffer an unacceptable loss of
+precision when using floating-point arithmetic.
+1
+To avoid these issues, we simulate frequencies instead of
+phase (given by ν ¼ _Φ, since we express the phase in units
+of cycles), which are controlled to remain at the same order
+of magnitude during the whole mission duration. However,
+modeling the propagation of laser beams is often easier in
+phase. Therefore, we will derive most of the equations of
+this paper both in units of phase and frequency.
+3. Two-variable decomposition
+In LISA, effects on the laser beams come into play at
+completely different timescales and dynamic ranges. On the
+one hand, some effects modulate the frequency of our
+beams on a time scale of the orbital revolution around the
+Sun, which lies well outside our measurement frequency
+band (below 10
+−4 Hz). These effects tend to have large
+dynamic ranges; for instance, the Doppler shifts caused by
+the relative spacecraft motion can fluctuate by several
+megahertz over the mission duration.
+On the other hand, we want to track small phase or
+frequency fluctuations within our measurement band (from
+10
+−4 Hz and up to 1 Hz), caused by gravitational-wave
+signals and instrumental noises. These fluctuations have a
+much smaller amplitude. The laser noise being the dom-
+inant effect, causing the heterodyne beatnote frequency to
+shift by about a few tens of Hertz, while gravitational waves
+typically cause frequency shifts of a few hundreds of
+nanohertz.
+To address this problem, we model these different effects
+independently. We decompose the laser beam frequency
+into one constant and two variables,
+νðτÞ¼ ν
+0 þ νoðτÞþ νϵðτÞ: ð5Þ
+The large frequency offsets νoðτÞ are used to represent
+frequency-plan offsets and Doppler shifts, both on the order
+of megahertz, as well as the gigahertz sideband frequency
+offsets. The small frequency fluctuations ν
+ϵðτÞ, on the other
+hand, are used to describe gravitational signals and noises.
+A simple laser beam would therefore be entirely repre-
+sented by the couple fν
+oðτÞ; νϵðτÞg.
+Alternatively, we can express Eq. (5) in phase units by
+writing the total phase as
+ΦðτÞ¼ ν0τ þ ϕ oðτÞþ ϕ ϵðτÞþ ϕ 0; ð6Þ
+where the definitions of large phase drifts ϕ oðτÞ and small
+phase fluctuations ϕ ϵðτÞ follow from Eq. (5),
+νoðτÞ¼ _ϕ oðτÞ and νϵðτÞ¼ _ϕ ϵðτÞ: ð7Þ
+As we simulate frequencies, we do not track the initial
+phase of the laser beam ϕ 0 ∈ ½0; 2π/C138 in the following.
+Let us stress that this decomposition is entirely artificial.
+In reality, we will only have access to the total phase or
+frequency. Therefore, to produce data representative of the
+real instrument telemetry, we always compute the total
+phase or frequency as the final simulation output.
+1For a precision better than a micro-cycle, a 64-bit integer
+representing the total phase will overflow every 0.07 s.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-4
+--- PAGE 5 ---
+4. Modulated beams
+In LISA, laser beams are phase-modulated using a
+gigahertz signal derived from the local clock. The electric
+field reads
+EðτÞ¼ E0ei2πΦc ðτÞeim cosð2πΦmðτÞÞ; ð8Þ
+where m is the modulation depth; ΦcðτÞ is the total phase of
+the carrier, and ΦmðτÞ is the total phase of the modulating
+signal, both expressed in cycles.
+The Jacobi-Anger expansion lets us write the previous
+expression using Bessel functions. Because the modulation
+depth m ≈ 0.15 is small [20], we can further expand the
+result to first order in m and write the complex field
+amplitude as the sum
+EðτÞ ≈ E0
+/C16
+ei2πΦc ðτÞ þ i m
+2
+h
+ei2πΦsbþ ðτÞ þ ei2πΦsb− ðτÞ
+i/C17
+; ð9Þ
+where we have defined the upper and lower sideband
+phases,
+Φsbþ ðτÞ¼ ΦcðτÞþ ΦmðτÞ; ð10aÞ
+Φsb− ðτÞ¼ ΦcðτÞ − ΦmðτÞ: ð10bÞ
+The modulated laser beam can then be written as the
+superposition of carrier, upper sideband, and lower side-
+band,
+EðτÞ ≈ E
+cðτÞþ Esbþ ðτÞþ Esb− ðτÞ: ð11Þ
+For the purpose of our simulation, the information content
+of the upper and lower sidebands are almost identical (one
+difference is that they lie at a different frequencies, and are
+thus affected differently by Doppler shifts). We make the
+assumption that they can be combined in such a way that
+we can treat them as one signal. Therefore, we only
+simulate the upper sideband. For clarity, we drop the sign
+in all sideband indices and simply use sb when we refer to
+the upper sideband.
+We apply the same two-variable decomposition to the
+sideband total frequency. Ultimately, each modulated laser
+beam is then implemented using four quantities,
+νðτÞ ≡ fν
+oc ðτÞ; νϵcðτÞ; νo
+sbðτÞ; νϵ
+sbðτÞg; ð12Þ
+where νoc and νo
+sb are the carrier and sideband frequency
+offsets, respectively, and νϵc and νϵ
+sb are the carrier and
+sideband frequency fluctuations.
+C. Local beams
+1. Local beam at laser source
+As illustrated in Fig. 2, optical bench 12 has an
+associated laser source. We call local beam the modulated
+beam produced by this laser source. We denote the total
+phase and frequency of the carrier as Φ
+12;cðτÞ and ν12;cðτÞ,
+respectively. Similarly, the sideband total phase and fre-
+quency are denotes as Φ12;sbðτÞ and ν12;sbðτÞ. All these
+signals are functions of the spacecraft proper time (TPS) τ1.
+The total phase Φ12;cðτÞ¼ ν0τ þ ϕ o
+12;cðτÞþ ϕ ϵ
+12;cðτÞ of
+the carrier is decomposed in terms of drifts and fluctua-
+tions, with
+ϕ o
+12;cðτÞ¼
+Z τ
+τ1;0
+O12ðτ0Þdτ0; ð13aÞ
+ϕ ϵ
+12;cðτÞ¼ p12ðτÞ; ð13bÞ
+where O12ðτÞ is the carrier frequency offset for this laser
+source with respect to the central frequency ν0, and p12ðτÞ
+is the laser source phase fluctuations expressed in cycles.
+As explained in Sec. VI, pijðτÞ can either describe the
+noise Np
+ijðτÞ of a cavity-stabilized laser (cf. Appendix B)o r
+the fluctuations resulting from an offset frequency lock.
+Likewise, O12ðτÞ is either set as an offset from the nominal
+frequency,2 or computed based on the locking conditions.
+In terms of frequency, we simply have
+νo
+12;cðτÞ¼ O12ðτÞ; ð14aÞ
+νϵ
+12;cðτÞ¼ _p12ðτÞ: ð14bÞ
+Let us now look at the sideband, which is derived from the
+local clock. As described in detail in Sec. IV, the modu-
+lating signal inherits any USO timing errors q1, such that
+we have
+Φ12;mðτÞ¼ νm
+12 · ðτ þ qo
+1 ðτÞþ qϵ
+1ðτÞþ M12ðτÞÞ ð 15Þ
+for the total phase of the modulating signal. Here, νm
+12 ¼
+2.4 GHz is the constant nominal frequency of the modu-
+lating signal on optical bench 12. We use the same
+modulation frequency for all optical benches indexed
+cyclically (12, 23, 31), while the remaining ones (13,
+32, 21) are instead at 2.401 GHz. The modulation noise
+term M
+12ðτÞ accounts for any additional imperfections
+(either in the electrical frequency conversion to 2.4 GHz or
+the optical modulation).
+2In the current mission baseline, there is no way to measure or
+set the absolute laser frequency with high precision. Therefore,
+the values set in the simulation cannot be accessed in reality.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-5
+--- PAGE 6 ---
+The total phase of the modulating signal can then be
+decomposed into
+ϕ o
+12ðτÞ¼ νm
+12 · ðτ þ qo
+1 ðτÞÞ; ð16aÞ
+ϕ ϵ
+12;mðτÞ¼ νm
+12 · ðqϵ
+1ðτÞþ M12ðτÞÞ: ð16bÞ
+Inserting these terms in Eq. (10), we get the phase and
+frequency offsets and fluctuations for the local sideband,
+ϕ o
+12;sbðτÞ¼
+Z τ
+τ1;0
+O12ðτ0Þdτ0 þ νm
+12ðτ þ qo
+1 ðτÞÞ; ð17aÞ
+ϕ ϵ
+12;sbðτÞ¼ p12ðτÞþ νm
+12ðqϵ
+1ðτÞþ M12ðτÞÞ; ð17bÞ
+and
+νo
+12;sbðτÞ¼ O12ðτÞþ νm
+12ð1 þ _qo
+1 ðτÞÞ; ð18aÞ
+νϵ
+12;sbðτÞ¼ _p12ðτÞþ νm
+12ð _q1ðτÞþ _M12ðτÞÞ: ð18bÞ
+Note that there is only one clock per spacecraft, such that
+we use the same q1 for sideband beams on both optical
+benches on spacecraft 1.
+2. Local beams at the interspacecraft and reference
+interferometer photodiodes
+As shown in Fig. 2, local beams propagate in the local
+optical bench 12 and interfere at the ISI, TMI, and RFI
+photodiodes. In our simulations, we neglect any phase term
+due to the propagation time. However, all beams pick up a
+generic optical path length noise term NobðτÞ (different for
+each interferometer), which models all optical path length
+variations due to, e.g., jitters of optical components in the
+path of the laser beams. By convention, we choose that a
+positive value of the optical path length noise term
+corresponds to a decrease in the actual optical path length,
+which in turn corresponds to a positive shift in phase or
+frequency.
+Therefore, we write the phase drifts and fluctuations of
+the local beams at the ISI and RFI photodiodes (valid for
+both carriers and sidebands) as
+ϕ
+o
+isi=rfi12←12ðτÞ¼ ϕ o
+12ðτÞ; ð19aÞ
+ϕ ϵ
+isi=rfi12←12ðτÞ¼ ϕ ϵ
+12ðτÞþ ν0
+c Nob
+isi=rfi12←12ðτÞ: ð19bÞ
+Equivalently, the frequency offsets and fluctuations of the
+same beams read
+νo
+isi=rfi12←12ðτÞ¼ νo
+12ðτÞ; ð20aÞ
+νϵ
+isi=rfi12←12ðτÞ¼ νϵ
+12ðτÞþ ν0
+c
+_Nob
+isi=rfi12←12ðτÞ: ð20bÞ
+3. Local beam at the test-mass
+interferometer photodiode
+The local beam reflects off the test mass before imping-
+ing on the TMI photodiode. As a consequence, it couples to
+the test-mass motion.
+In reality, the motion of the test mass and spacecraft will
+be coupled by the drag-free attitude control system
+(DFACS). The spacecraft motion is expected to be sup-
+pressed in on-ground processing [20]. For our purposes, we
+simply assume that the spacecraft (and the associated
+optical benches) perfectly follows a geodesic.
+The laser beam then picks up an additional noise term
+N
+δ
+23ðτÞ due to any deviation in the motion of the test-mass
+from geodesic, caused by spurious forces (cf. Appendix B).
+This noise represents the movement of the test mass
+towards the measuring optical bench, such that a posi-
+tive value corresponds to a decrease in path length (see
+Fig. 3), and thus a positive phase shift. The noise term
+enters with a factor of 2, since the beam travels to the test
+mass and back.
+Therefore, at the TMI photodiode, the phase components
+of the local beam (carrier and sideband) read
+ϕ
+o
+tmi12←12ðτÞ¼ ϕ o
+12ðτÞ; ð21aÞ
+ϕ ϵ
+tmi12←12ðτÞ¼ ϕ ϵ
+12ðτÞþ ν0
+c
+/C18
+Nob
+tmi12 ←12ðτÞþ 2Nδ
+12ðτÞ
+/C19
+;
+ð21bÞ
+while the frequency offsets and fluctuations read
+νo
+tmi12←12ðτÞ¼ νo
+12ðτÞ; ð22aÞ
+FIG. 3. Definition of line-of-sight displacement of the test
+mass. Positive values of Nδ
+12 indicate a motion towards the
+measuring optical bench.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-6
+--- PAGE 7 ---
+νϵ
+tmi12←12ðτÞ¼ νϵ
+12ðτÞþ ν0
+c
+/C18
+_Nob
+tmi12←12ðτÞþ 2 _Nδ
+12ðτÞ
+/C19
+:
+ð22bÞ
+D. Adjacent beams
+In this section, we study the propagation of a modulated
+laser beam generated by laser source 13 (attached to the
+adjacent optical bench), which travels through the optical
+fiber to the local optical bench 12, to finally interfere on the
+TMI and RFI photodiodes (see Fig. 2). We call it the
+adjacent beam . We express all phase and frequency
+quantities as functions of the TPS τ
+1.
+Similarly to local beams, we neglect the propagation
+time for the adjacent beams, and model fluctuations in the
+optical path length by a noise term NobðτÞ. We model any
+nonreciprocal noise terms related to the propagation
+through the optical fibers by the backlink noise term
+N
+bl
+12←13ðτÞ, expressed as an equivalent path length change.
+Therefore, the phase drifts and fluctuations of adjacent
+beams (carrier and sideband) at the TMI and RFI photo-
+diodes read
+ϕ
+o
+tmi=rfi12 ←13ðτÞ¼ ϕ o
+13ðτÞ; ð23aÞ
+ϕ ϵ
+tmi=rfi12 ←13ðτÞ¼ ϕ ϵ
+13ðτÞþ ν0
+c Nbl
+12←13ðτÞþ ν0
+c Nob
+tmi=rfi12←13;
+ð23bÞ
+where ϕ o
+13ðτÞ and ϕ ϵ
+13ðτÞ are the phase drifts and fluctua-
+tions of the laser beam produced by laser source 13,
+respectively. The equivalent frequency quantities are
+νo
+tmi=rfi12 ←13ðτÞ¼ νo
+13ðτÞ; ð24aÞ
+νϵ
+tmi=rfi12 ←13ðτÞ¼ νϵ
+13ðτÞþ ν0
+c
+_Nbl
+12←13ðτÞþ ν0
+c
+_Nob
+tmi=rfi12←13:
+ð24bÞ
+E. Distant beams
+Finally, we study the propagation of a modulated laser
+beam generated by laser source 21 (attached to the distant
+optical bench), which travels roughly 2.5 million kilo-
+meters in free space before it reaches the local optical bench
+12. This distant beam eventually interferes on the ISI
+photodiode, see Fig. 2.
+1. Interspacecraft propagation
+As described in Sec. III B, modulated beams are repre-
+sented as the superposition of simple beams, each treated
+independently. Consequently, the same propagation equa-
+tions apply to both carrier and sideband beams.
+We shall derive the expression of a simple laser beam ’s
+phase Φ
+12←21ðτÞ and frequency ν12←21ðτÞ measured on
+receiver optical bench 12 (expressed in comoving time
+coordinate τ
+1) as a function of the same beam ’s phase
+Φ21ðτÞ and frequency ν21ðτÞ measured on emitter optical
+bench 21 (expressed in comoving time coordinate τ2). We
+write
+Φ12←21ðτÞ¼ Φ21ðτ − d12ðτÞÞ; ð25Þ
+where d12ðτÞ is the proper pseudorange (PPR), which
+includes not only the light time of flight, but also con-
+versions between reference frames associated to τ
+1 and τ2.
+Since we model small in-band and large out-of-band
+effects independently, we need to decompose the PPR in a
+similar manner. We define do
+12ðτÞ as slowly varying PPR
+offsets (e.g., due to constant path lengths and variations in
+orbital motion, relativistic effects, and coordinate trans-
+formations), and d
+ϵ
+12ðτÞ as small in-band PPR fluctuations.
+In our simulation, we only consider the effect of
+gravitational waves and neglect any other small in-band
+fluctuations of the PPRs (such as spacecraft jitter motion or
+variations of the interplanetary medium optical index).
+Therefore, if H
+12ðτÞ denotes the integrated fluctuations of
+the PPR due to gravitational waves measured on MOSA 12,
+we have d
+ϵ
+12ðτÞ¼ H12ðτÞ. The total PPR now reads
+d12ðτÞ¼ do
+12ðτÞþ H12ðτÞ: ð26Þ
+Applying this decomposition to Eqs. (6) and (25),w e
+have
+Φ12←21ðτÞ¼ ν0 · ðτ − do
+12ðτÞ − H12ðτÞÞ
+þ ϕ o
+21ðτ − do
+12ðτÞ − H12ðτÞÞ
+þ ϕ ϵ
+21ðτ − do
+12ðτÞ − H12ðτÞÞ: ð27Þ
+We expand the previous equation to first order in both the
+small fluctuations H12ðτÞ, and ϕ ϵ
+21ðτÞ and neglect any
+second-order cross terms,
+Φ12←21ðτÞ¼ ν0 · ðτ − do
+12ðτÞ − H12ðτÞÞ
+þ ϕ o
+21ðτ − do
+12ðτÞÞ
+− νo
+21ðτ − do
+12ðτÞÞH12ðτÞ
+þ ϕ ϵ
+21ðτ − do
+12ðτÞÞ: ð28Þ
+We can again write the previous quantity as the sum
+of large phase drifts and small phase fluctuations,
+Φ
+12←21ðτÞ¼ ν0τ þ ϕ o
+12←21ðτÞþ ϕ ϵ
+12←21ðτÞ, with
+ϕ o
+12←21ðτÞ¼ ϕ o
+21ðτ − do
+12ðτÞÞ − ν0do
+12ðτÞ; ð29aÞ
+ϕ ϵ
+12←21ðτÞ¼ ϕ ϵ
+21ðτ − do
+12ðτÞÞ
+− ½ν0 þ νo
+21ðτ − do
+12ðτÞÞ/C138 H12ðτÞ: ð29bÞ
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-7
+--- PAGE 8 ---
+We write the equivalent instantaneous frequencyν12←21ðτÞ¼
+ν0 þ νo
+12←21ðτÞþ νϵ
+12←21ðτÞ as the sum of a large frequency
+offsets and small frequency fluctuations,
+νo
+12←21ðτÞ¼ νo
+21ðτ− do
+12ðτÞÞð1 − _do
+12ðτÞÞ − ν0 _do
+12ðτÞ; ð30aÞ
+νϵ
+12←21ðτÞ¼ νϵ
+21ðτ − do
+12ðτÞÞð1 − _do
+12ðτÞÞ
+− ½ν0 þ νo
+21ðτ − do
+12ðτÞÞ/C138 _H12ðτÞ: ð30bÞ
+Here, we have neglected first-order terms in _νo
+AH12ðτÞ,s o
+these equations are only valid if the laser frequency is
+evolving slowly. This is discussed in more detail in
+Appendix C.
+2. Distant beams at the interspacecraft
+interferometer photodiode
+The received distant beam propagates inside the optical
+bench to interfere with the local beam at the ISI photodiode.
+As for the other beams, we only add a generic optical path
+length noise term Nob
+isi12←21ðτÞ.
+We write the phase drifts and fluctuations of the distant
+beam at the ISI photodiode (valid for both carrier and
+sideband) as
+ϕ o
+isi12 ←21ðτÞ¼ ϕ o
+21ðτ − do
+12ðτÞÞ − ν0do
+12ðτÞ; ð31aÞ
+ϕ ϵ
+isi12←21ðτÞ¼ ϕ ϵ
+21ðτ − do
+12ðτÞÞ
+− ½ν0 þ νo
+21ðτ − do
+12ðτÞÞ/C138 H12ðτÞ
+þ ν0
+c Nob
+isi12←21ðτÞ: ð31bÞ
+Equivalently, the frequency offsets and fluctuations read
+νo
+isi12 ←21ðτÞ¼ νo
+21ðτ − do
+12ðτÞÞð1 − _do
+12ðτÞÞ − ν0 _do
+12ðτÞ;
+ð32aÞ
+νϵ
+isi12 ←21ðτÞ¼ νϵ
+21ðτ − do
+12ðτÞÞð1 − _do
+12ðτÞÞ
+− ½ν0 þ νo
+21ðτ − do
+12ðτÞÞ/C138 _H12ðτÞ
+þ ν0
+c
+_Nob
+isi12←21ðτÞ: ð32bÞ
+F. Interferometers
+1. Beatnote for simple beams
+Using definitions given in Eq. (4), let us write the
+complex amplitude for two simple beams 1 and 2 interfer-
+ing at a photodiode,
+E1ðτÞ¼ E1;0ðτÞei2πΦ1ðτÞ; ð33aÞ
+E2ðτÞ¼ E2;0ðτÞei2πΦ2ðτÞ: ð33bÞ
+We ignore any effects due to spatial dimensions of the beam
+or the photodiode, and assume that such effects will be
+modeled as either an equivalent phase error in the readout
+signal, or as an independent quantity.
+3
+The power of the total electromagnetic field measured
+near the photodiode is
+PðτÞ ∝ jE1ðτÞþ E2ðτÞj2: ð34Þ
+Substituting the expressions of the two beams yields
+PðτÞ ∝ jE1;0ðτÞj2 þj E2;0ðτÞj2
+þ 2E1;0ðτÞE2;0ðτÞ cosð2πðΦ1ðτÞ − Φ2ðτÞÞÞ: ð35Þ
+The power near the photodiode has an oscillating
+component with a total phase of ΦPDðτÞ¼ Φ1ðτÞ −Φ2ðτÞ.
+We call this signal the beatnote.
+Let us use the two-variable representation described in
+Eq. (6),
+Φ1ðτÞ¼ ν0τ þ ϕ o
+1 ðτÞþ ϕ ϵ
+1ðτÞ; ð36aÞ
+Φ2ðτÞ¼ ν0τ þ ϕ o
+2 ðτÞþ ϕ ϵ
+2ðτÞ; ð36bÞ
+to express the total phase of the beatnote as the sum of large
+phase drifts and small phase fluctuations,
+ΦPDðτÞ¼ ϕ o
+PDðτÞþ ϕ ϵ
+PDðτÞ; ð37Þ
+with
+ϕ o
+PDðτÞ¼ ϕ o
+1 ðτÞ − ϕ o
+2 ðτÞ; ð38aÞ
+ϕ ϵ
+PDðτÞ¼ ϕ ϵ
+1ðτÞ − ϕ ϵ
+2ðτÞ: ð38bÞ
+We simulate the equivalent instantaneous frequency
+defined as νPDðτÞ¼ _ΦPDðτÞ. It can be written as
+νPDðτÞ¼ νo
+PDðτÞþ νϵ
+PDðτÞ; ð39Þ
+where the beatnote frequency offsets νo
+PDðτÞ and the
+beatnote frequency fluctuations νϵ
+PDðτÞ are defined by
+νo
+PDðτÞ¼ νo
+1 ðτÞ − νo
+2 ðτÞ; ð40aÞ
+νϵ
+PDðτÞ¼ νϵ
+1ðτÞ − νϵ
+2ðτÞ: ð40bÞ
+2. Beatnote polarity
+A closer look at Eq. (35) shows that we do not have
+direct access to the total phase of the beatnote ΦPDðτÞ,b u t
+3For example, DWS could be modeled as a direct measurement
+of beam tilt angles, with all beam angles represented by
+independent variables.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-8
+--- PAGE 9 ---
+only measure its cosine value. Therefore, the total phase
+can only be known up to a sign and a multiple of 2π.
+Physically, this sign ambiguity corresponds to the fact
+that the electrical signal does not contain any information
+about which of the two interfering laser beams is of higher
+frequency. In practice, however, the beatnote polarity can
+be determined at all times by applying a known frequency
+offset on the local laser beam and observing the resulting
+change in the beatnote frequency. In addition, once all
+lasers are locked, the beatnote polarities can simply be read
+from the frequency plan, as described in Sec. VI.
+Therefore, we do not include the beatnote polarity
+ambiguity in our optical models, and we will instead
+assume that it is solved directly by the phasemeter, or in
+a first processing step on ground.
+3. Beatnotes for modulated beams
+We now study the electromagnetic field of two interfer-
+ing modulated beams, labeled k ¼ 1, 2. As derived in
+Sec. III B, we write both modulated beams as the sum of
+three independent simple beams, namely the carriers and
+the upper and lower sidebands,
+E
+kðτÞ¼ Ek;cðτÞþ Ek;sbþ ðτÞþ Ek;sb− ðτÞ; ð41Þ
+with total phases
+Φk;cðτÞ¼ ν0τ þ Φo
+k;cðτÞþ Φϵ
+k;cðτÞ; ð42aÞ
+Φk;sbþ ðτÞ¼ ν0τ þ Φo
+k;sbþ ðτÞþ Φϵ
+k;sbþ ðτÞ; ð42bÞ
+Φk;sb− ðτÞ¼ ν0τ þ Φo
+k;sb− ðτÞþ Φϵ
+k;sb− ðτÞ: ð42cÞ
+or the equivalent instantaneous frequencies
+νk;cðτÞ¼ ν0 þ νo
+k;cðτÞþ νϵ
+k;cðτÞ; ð43aÞ
+νk;sbþ ðτÞ¼ ν0 þ νo
+k;sbþ ðτÞþ νϵ
+k;sbþ ðτÞ; ð43bÞ
+νk;sb− ðτÞ¼ ν0 þ νo
+k;sb− ðτÞþ νϵ
+k;sb− ðτÞ: ð43cÞ
+The total power at the photodiode reads
+jE1ðτÞþ E2ðτÞj2 ¼j E1;cðτÞþ E1;sbþ ðτÞþ E1;sb− ðτÞþ E2;cðτÞ
+þ E2;sbþ ðτÞþ E2;sb− ðτÞj2: ð44Þ
+Expanding this expression yields cross terms between all 6
+terms, which correspond to beatnotes at their difference
+frequencies.
+Because the sidebands are modulated at a frequency of
+about 2.4 GHz, most of these beatnote frequencies lie far
+outside of the phasemeters measurement bandwidth
+(approximately 5 MHz to 25 MHz).
+Only three beatnotes lie inside this region:
+(i) The carrier-carrier beatnote,
+Φ
+PD;cðτÞ¼ Φ1;cðτÞ − Φ2;cðτÞ; ð45aÞ
+νPD;cðτÞ¼ ν1;cðτÞ − ν2;cðτÞ. ð45bÞ
+(ii) The upper sideband-upper sideband beatnote,
+ΦPD;sbþ ðτÞ¼ Φ1;sbþ ðτÞ − Φ2;sbþ ðτÞ; ð46aÞ
+νPD;sbþ ðτÞ¼ ν1;sbþ ðτÞ − ν2;sbþ ðτÞ. ð46bÞ
+(iii) The lower sideband-lower sideband beatnote,
+ΦPD;sb− ðτÞ¼ Φ1;sb− ðτÞ − Φ2;sb− ðτÞ; ð47aÞ
+νPD;sb− ðτÞ¼ ν1;sb− ðτÞ − ν2;sb− ðτÞ. ð47bÞ
+Because the sidebands of the lasers on MOSAs 12, 23, and
+31 (respectively 13, 32, and 21) are offset by 2.4 GHz
+(respectively, 2.401 GHz), and because we always interfere
+beams from both types of MOSA, these three beatnotes will
+always be offset by 1 MHz. Therefore, they can be tracked
+individually by the phasemeter.
+Each of these beatnote frequencies can be decomposed
+again as a sum of large frequency offsets and small fluctua-
+tions, and we recover equations similar to Eq. (40).
+Therefore, the carrier and sideband parts of a modulated
+laser beam can be implemented as three distinct beams in the
+simulation, from which we form three beatnotes.
+As described in the previous sections, we only include
+the carrier and upper-sideband laser beams in our model; as
+a consequence, we only compute the carrier-carrier and the
+upper sideband-upper sideband beatnotes.
+4. Interspacecraft, test-mass, and reference
+interferometer beatnotes
+To obtain the beatnote phases (or frequencies) measured
+by the ISI, TMI, and RFI, we can substitute in the pre-
+vious equations the phases (or frequencies) of the interfer-
+ing beams.
+As discussed above, the beatnote polarities are arbitrary.
+As a convention, we will always write the beatnote phase
+(and frequencies) as the difference of the distant or adjacent
+beam phase (or frequency) and the local beam phase (or
+frequency),
+ϕ ðτÞ¼ ϕ
+distant=adjacentðτÞ − ϕ localðτÞ; ð48aÞ
+νðτÞ¼ νdistant=adjacentðτÞ − νlocalðτÞ: ð48bÞ
+Following the optical-bench design of Fig. 2, we have the
+following beatnote phase offsets and fluctuations, for both
+carriers and sidebands,
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-9
+--- PAGE 10 ---
+ϕ isi12 ðτÞ¼ ϕ isi12←21ðτÞ − ϕ isi12←12ðτÞ; ð49aÞ
+ϕ tmi12 ðτÞ¼ ϕ tmi12←13ðτÞ − ϕ tmi12←12ðτÞ; ð49bÞ
+ϕ rfi12 ðτÞ¼ ϕ rfi12←13ðτÞ − ϕ rfi12←12ðτÞ; ð49cÞ
+and similarly for beatnote frequencies.
+IV. PHASE READOUT, FREQUENCY
+DISTRIBUTION, AND CLOCK
+ERROR MODELING
+We show in Fig. 4 an overview of the LISA phase
+readout chain, adapted from [27] (where technical details
+on the phase readout and frequency distribution system
+can be found). The optical beatnotes are converted to
+electrical signals by photoreceivers, which are then digi-
+tized by an analog-to-digital converter (ADC). The phase of
+these digital signals are then tracked by digital phase-
+locked loops (DPLLs).
+The phasemeter is driven by an 80 MHz clock signal.
+Inside the phasemeter, the ADC samples the electrical
+beatnotes at the same rate, with an additional timing jitter
+intrinsic to the ADC. This ADC jitter results in a phase
+error in the measured beatnotes, which is expected above
+the requirements. To correct for the ADC jitter, an addi-
+tional periodic pilot tone signal at 75 MHz is derived from
+the on-board clock and superimposed on each electrical
+signal fed to the phasemeter. The pilot tone phase is tracked
+alongside the main beatnotes in dedicated DPLL channels.
+By comparing the measured pilot tone phase against its
+nominal 75 MHz value, the ADC jitter can be corrected in the
+main beatnotes, such that the pilot tone becomes the effective
+reference clock signal for the phase measurements.
+A. Readout noise
+We directly simulate the optical beatnote frequencies.
+Our simulated electrical signals are therefore the same
+quantities, with the addition of a readout noise term N
+roðτÞ.
+This readout noise accounts for both shot noise and any
+errors due to front-end electronic in the photoreceivers;
+refer to Appendix B for more details.
+B. Phasemeter and pilot tone
+Because the photoreceiver signals are already simulated
+as discrete beatnote frequency samples, we do not directly
+simulate the digitization process of the ADC nor the phase
+tracking by the DPLLs.
+Furthermore, we do not simulate the pilot tone correc-
+tion, but assume that it perfectly removes the ADC jitter.
+We do account for timing errors in the pilot tone itself,
+which are also expected above the requirements. These
+pilot tone errors will be corrected using the sidebands
+introduced in Sec. III B. Refer to the next Sec. IV for how
+we model the pilot tone and sideband signals.
+C. Frequency distribution and clock signals
+1. Frequency-distribution scheme
+Most subsystems on board LISA are driven by timing
+signals derived from the USO. In our simulation model, we
+focus on processes for which timing is performance critical,
+which are summarized in Fig. 5.
+Following the current mission design, each LISA space-
+craft uses one dedicated clock (realized by an USO), from
+which all timing signals are derived. As described above,
+the timing reference for all phasemeter measurements is the
+pilot tone, which is derived from the USO by first up-
+converting its nominal frequency
+4 to 2.4 GHz, and then
+converting that signal to the desired νPT ¼ 75 MHz using
+frequency dividers. This conversion chain allows for a very
+stable phase relationship between the electrical pilot tone
+and the 2.4 GHz optical sideband [27], which are used in
+post-processing to reduce the timing errors of the pilot tone
+itself [22,28–32].
+The 2.401 GHz sidebands used on right MOSAs, on the
+other hand, are less stable with respect to the pilot tone.
+This is acceptable, as additional clock noise in this signal
+can be corrected for using the sideband beatnotes in the
+RFI [22,32].
+Lastly, any errors in the 80 MHz phasemeter clock are
+also corrected by the pilot tone correction, such that it is not
+performance critical and could either be directly syn-
+thesized from the USO or from the 2.4 GHz signal. This
+choice is currently irrelevant for our simulation since we
+directly simulate the pilot tone as reference clock for all
+measurements.
+2. Clock-signal model
+We model the pilot tone signal as a periodic signal of
+the form
+FIG. 4. Overview of the phase readout chain of LISA, adapted
+from [27]. The photoreceiver converts the optical signal to
+electric signals, which are then digitized by the ADC. The
+intrinsic timing jitter of the ADC is corrected by a 75 MHz
+pilot tone superimposed to the photoreceiver signal. The phase-
+meter DPLLs then tracks the beatnote phases.
+4No final decision has been made on the precise USO
+frequency that will be used for LISA.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-10
+--- PAGE 11 ---
+VPTðτÞ¼ cosð2πνPT½τ þ q1ðτÞ/C138Þ : ð50Þ
+Here, q1ðτÞ describes the timing deviations of the pilot tone
+generated on spacecraft 1 with respect to the TPS τ1,
+expressed in the latter. Note that the dominant noise source
+in the pilot tone generation is the USO itself [27], such that
+we assume the statistical properties of the pilot tone noise to
+be identical to those of the USO noise.
+We further decompose q
+1ðτÞ using two time series,
+q1ðτÞ¼ qo
+1 ðτÞþ qϵ
+1ðτÞ; ð51Þ
+to model large deterministic effects (such as clock fre-
+quency offsets and drifts) and small in-band stochastic
+fluctuations. As before, we do not simulate the 75 MHz
+signal itself, but only qo
+1 ðτÞ and qϵ
+1ðτÞ [or rather _qo
+1 ðτÞ and
+_qϵ
+1ðτÞ as the pilot tones fractional frequency fluctuations].
+The clock signal is used to create the sidebands, as
+described in Sec. III C. The total phase of the sideband
+modulation signals is modeled as
+νm
+12 · ðτ þ q1ðτÞþ M12ðτÞÞ: ð52Þ
+Here, νm
+12 is the constant nominal frequency5 of the
+modulating signal on optical bench 12. Imperfections in
+the frequency conversion between the pilot tone and the
+sidebands are modeled by an additional modulation noise
+term M12ðτÞ.
+D. Timer model
+In order to model timestamping and pseudoranging
+(cf. Sec. VII), we not only need the frequency fluctuations
+of the local clock, but also the time shown by each
+spacecraft timer. These times must be tracked down to at
+least ns precision while reaching values of around 108 sa t
+the end of the 10 years of extended mission. The use of
+double-precision floating-point numbers is not compatible
+with such a dynamic range. Therefore, we simulate offsets
+of that timer relative to the associated TPS δˆτ
+τ1
+1 ðτÞ ≡ δˆτ1ðτÞ,
+called timer deviations, which evolve slowly with time. The
+total clock time6 ˆττ1
+1 ðτÞ as a function of the TPS can then be
+computed by
+ˆττ1
+1 ðτÞ¼ τ þ δˆτ1ðτÞ: ð53Þ
+Timer deviations are closely related to the clock timing
+jitter,
+δˆτ1ðτÞ¼ q1ðτÞþ δˆτ1;0: ð54Þ
+In this equation, δˆτ1;0 accounts for the fact that we don ’t
+know the true time τ1;0 at which we turn on the timer, i.e.,
+we cannot directly relate the initial phase of the clock signal
+q1ðτ1;0Þ to any external time frame.
+E. Signal sampling
+1. Signal sampling in terms of phase
+The photoreceiver signals recorded, say, on spacecraft 1,
+are generated according to the TPS τ1. The measurements
+that are eventually telemetered, however, are recorded and
+timestamped with clock time ˆτ1. As a consequence, we
+need to resample the photoreceiver signals from the TPS to
+the clock time frame.
+If a photoreceiver signal Φ
+PD is expressed in terms of
+phase, this can be achieved following Eq. (3),
+Φˆτ1
+PDðτÞ¼ Φτ1
+PDðτˆτ1
+1 ðτÞÞ: ð55Þ
+Therefore, we need to compute the TPS τˆτ1
+1 ðτÞ given a given
+clock time τ. This quantity can be computed by writing
+Eq. (53) evaluated at τˆτ1
+1 ðτÞ,
+ˆττ1
+1 ðτˆτ1
+1 ðτÞÞ ¼ τˆτ1
+1 ðτÞþ δˆτ1ðτˆτ1
+1 ðτÞÞ: ð56Þ
+We use Eq. (3) to rewrite the left-hand side, which gives,
+after rearranging,
+τˆτ1
+1 ðτÞ¼ τ − δˆτ1ðτˆτ1
+1 ðτÞÞ: ð57Þ
+We can solve this implicit equation for τˆτ1
+1 ðτÞ iteratively, by
+computing
+FIG. 5. Overview over the USO frequency distribution on one
+optical bench, based on [27]. Not depicted is a possible electrical
+comparison between the 2.4 GHz and 2.401 GHz signals. Note
+that the phasemeter clock is not performance critical, and could
+be synthesized from either the 2.4 GHz signal or directly from the
+USO, indicated by two possible connections in dotted lines.
+5By definition, these frequencies are at their nominal values.
+The real modulation signals will have a frequency offset due to
+the terms q1 and M12 in Eq. (15).
+6This timescale will be realized in practice by the so-called
+spacecraft elapsed time (SCET), which is the only timescale
+directly available onboard the satellites.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-11
+--- PAGE 12 ---
+δˆτð0Þ
+1 ðτÞ¼ δˆτ1ðτÞ; ð58aÞ
+δˆτðnþ1Þ
+1 ðτÞ¼ δˆτ1ðτ − δˆτðnÞ
+1 ðτÞÞ; ð58bÞ
+such that
+lim
+n→∞
+δˆτðnÞ
+1 ðτÞ¼ δˆτ1ðτˆτ1
+1 ðτÞÞ: ð59Þ
+Since the timer deviations are evolving slowly, the iteration
+converges quickly. In our simulations, we stop after two
+iterations, such that
+τˆτ1
+1 ðτÞ ≈ τ − δˆτð2Þ
+1 ðτÞ: ð60Þ
+We can then plug the previous equation in Eq. (55) to
+write all frame-independent measurements as a functions of
+the correct recording times Φˆτ1
+PDðτÞ, given the same quan-
+tities expressed in the TPS. We find
+Φˆτ1
+PDðτÞ ≈ Φτ1
+PDðτ − δˆτð2Þ
+1 ðτÞÞ: ð61Þ
+This operation can be implemented with a time-varying
+fractional-delay filter (interpolation).
+We introduce the timestamping operator T1, which shifts
+a signal sðτÞ from the TPS to the clock time of spacecraft 1.
+Formally, its action is given by
+T1sðτÞ¼ sðτ − δˆτð2Þ
+1 ðτÞÞ: ð62Þ
+Using this shorthand notation, Eq. (61) now reads
+Φˆτ1
+PDðτÞ¼ Φτ1
+PDðτˆτ1
+1 ðτÞÞ ≈ T1Φτ1
+PDðτÞ: ð63Þ
+Note that this is only valid for measurements expressed
+in phase, as frequencies are not frame-independent
+quantities.
+2. Sampling errors in terms of frequency
+The effect of sampling can also be expressed in terms of
+total frequency, where it manifests itself as a Doppler-like
+frequency shift.
+In the following paragraph, we compute frequencies
+by taking the derivative of phase with respect to the
+clock time, since this is the time reference that the
+phasemeter will use to measure the signal frequency.
+From Eq. (55), and denoting function composition as
+ðΦ
+τ1
+PD∘τˆτ1
+1 ÞðτÞ¼ Φτ1
+PDðτˆτ1
+1 ðτÞÞ,w eh a v e
+νˆτ1
+PDðτÞ¼ dΦˆτ1
+PD
+dτ ðτÞ¼ dðΦτ1
+PD∘τˆτ1
+1 Þ
+dτ ðτÞ: ð64Þ
+Using the chain rule,
+νˆτ1
+PDðτÞ¼ ντ1
+PDðτˆτ1
+1 ðτÞÞ × dτˆτ1
+1
+dτ ðτÞ: ð65Þ
+To compute the derivative of τˆτ1
+1 ðτÞ, let us differentiate
+the defining implicit Eq. (57),
+dτˆτ1
+1
+dτ ðτÞ¼ 1 − dðδˆτ1∘τˆτ1
+1 Þ
+dτ ðτÞ
+¼ 1 − dδˆτ1
+dτ ðτˆτ1
+1 ðτÞÞ × dτˆτ1
+1
+dτ ðτÞ: ð66Þ
+Using Eq. (54), we find d δˆτ1=dτ ¼ _q1ðτÞ. Inserting this
+identity, we can rearrange the previous equation to get
+dτˆτ1
+1
+dτ ðτÞ¼ 1
+1 þ _q1ðτˆτ1
+1 ðτÞÞ
+; ð67Þ
+which finally yields for the total frequency,
+νˆτ1
+PDðτÞ¼ ντ1
+PDðτˆτ1
+1 ðτÞÞ
+1 þ _q1ðτˆτ1
+1 ðτÞÞ
+≈ T1
+/C20 ντ1
+PDðτÞ
+1 þ _q1ðτÞ
+/C21
+: ð68Þ
+3. Sampling in two-variable decomposition
+We now want to describe the effect of timing errors in the
+framework of two-variable decomposition. This will allow
+us to split the sampling errors derived previously into large
+deterministic offsets in the measurement timestamps, and
+small stochastic fluctuations that enter as an additional
+noise term. The latter represent what is often referred to as
+clock noise , see, e.g., [20].
+However, we want to make it clear once more that this
+decomposition is entirely artificial. Both slow drifts and in-
+band clock noise describe the same physical process,
+namely the instability of the USO, on different time scales.
+The sampling process applies to the total phase of each
+photoreceiver signal, given by Eq. (37) as
+Φ
+ˆτ1
+PDðτÞ¼ Φτ1
+PDðτˆτ1
+1 ðτÞÞ
+¼ ϕ o
+PDðτˆτ1
+1 ðτÞÞ þ ϕ ϵ
+PDðτˆτ1
+1 ðτÞÞ: ð69Þ
+Since ϕ o
+PDðτÞ is very quickly evolving, small (first-order)
+timing fluctuations in τˆτ1
+1 ðτÞ must appear in the measure-
+ment described by ϕ ϵ
+PDðτÞ. Thus, we must account for the
+cross coupling between ϕ o
+PDðτÞ and ϕ ϵ
+PDðτÞ, and we cannot
+simply time shift both components individually.
+We can insert Eqs. (51) and (54) into Eq. (57) to get
+τˆτ1
+1 ðτÞ¼ τ − δˆτ1;0 − qo
+1 ðτˆτ1
+1 ðτÞÞ − qϵ
+1ðτˆτ1
+1 ðτÞÞ: ð70Þ
+We model clock-noise fluctuations _qϵ
+1 as band-limited
+noise, such that they remain small and we can expand
+the ϕ o term in Eq. (69) to first order in _qϵ
+1,
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-12
+--- PAGE 13 ---
+Φˆτ1
+PDðτÞ¼ ϕ o
+PDðτ − δˆτ1;0 − qo
+1 ðτˆτ1
+1 ðτÞÞÞ þ ϕ ϵ
+PDðτˆτ1
+1 ðτÞÞ
+− νo
+PDðτ − δˆτ1;0 − qo
+1 ðτˆτ1
+1 ðτÞÞÞqϵ
+1ðτˆτ1
+1 ðτÞÞ: ð71Þ
+Finally, we obtain the two variable-decomposition for the
+resampled photoreceiver phase.
+ϕ ˆτ1;o
+PD ðτÞ ≈ ϕ o
+PDðτ − δˆτ1;0 − T1qo
+1 ðτÞÞ; ð72aÞ
+ϕ ˆτ1;ϵ
+PD ðτÞ ≈ T1ϕ ϵ
+PDðτÞ − νo
+PDðτ − δˆτ1;0 − T1qo
+1 ðτÞÞT1qϵ
+1ðτÞ:
+ð72bÞ
+For frequency data, we start with Eq. (68), and decompose
+again clock noise _q1 into two variables, as explained in
+Sec. IV. We then expand it to first order in _qϵ
+1 to get
+1
+1 þ _qo
+1 ðτˆτ1
+1 ðτÞÞ þ _qϵ
+1ðτˆτ1
+1 ðτÞÞ
+≈ 1
+1 þ _qo
+1 ðτˆτ1
+1 ðτÞÞ
+− _qϵ
+1ðτˆτ1
+1 ðτÞÞ
+½1 þ _qo
+1 ðτˆτ1
+1 ðτÞÞ/C138 2 : ð73Þ
+So in total, we have
+νˆτ1
+PDðτÞ ≈ ντ1
+PDðτˆτ1
+1 ðτÞÞ
+/C20 1
+1 þ _qo
+1 ðτˆτ1
+1 ðτÞÞ
+− _qϵ
+1ðτˆτ1
+1 ðτÞÞ
+½1 þ _qo
+1 ðτˆτ1
+1 ðτÞÞ/C138 2
+/C21
+:
+ð74Þ
+We now expand ντ1
+PDðτÞ¼ ντ1;o
+PD ðτÞþ ντ1;ϵ
+PD ðτÞ, and neglect
+the small coupling of qϵ
+1ðτÞ to the already small fluctuations
+ντ1;ϵ
+PD ðτÞ. We collect the terms to express the photodiode
+signal offsets νˆτ1;o
+PD ðτÞ and fluctuations νˆτ1;ϵ
+PD ðτÞ after shifting
+to the clock time, using Eq. (61),
+νˆτ1;o
+PD ðτÞ ≈ T1ντ1;o
+PD ðτÞÞ
+1 þ T1 _qo
+1 ðτÞ ; ð75aÞ
+νˆτ1;ϵ
+PD ðτÞ ≈ T1ντ1;ϵ
+PD ðτÞ
+1 þ T1 _qo
+1 ðτÞ − T1ντ1;o
+PD ðτÞT1 _qϵ
+1ðτÞ
+½1 þ T1 _qo
+1 ðτÞ/C138 2 : ð75bÞ
+To simplify further our equations, we define the frequency
+timestamping operator, which includes the rescaling by
+1 þ _q
+o
+1 . It is formally defined by its action on a signal sðτÞ,
+_T1sðτÞ¼ T1
+/C20 sðτÞ
+1 þ _qo
+1 ðτÞ
+/C21
+¼ T1sðτÞ
+1 þ T1 _qo
+1 ðτÞ : ð76Þ
+Now, photoreceiver frequency signals in the clock-time
+frame of spacecraft 1 read
+νˆτ1;o
+PD ðτÞ ≈ _T1ντ1;o
+PD ðτÞ; ð77aÞ
+νˆτ1;ϵ
+PD ðτÞ ≈ _T1
+/C20
+ντ1;ϵ
+PD ðτÞ − ντ1;o
+PD ðτÞ _qϵ
+1ðτÞ
+1 þ _qo
+1 ðτÞ
+/C21
+: ð77bÞ
+V. ONBOARD PROCESSING
+In this section, we describe the processing steps the
+readout signals undergo on board the spacecraft, and in
+particular the filtering and downsampling steps. The
+sampling rates used in our simulation are shown schemati-
+cally in Fig. 6. We then give the expression of the main
+measurement signals, which are the main outputs of the
+simulation.
+A. Filtering and downsampling
+1. Physics sampling rate
+As described in Sec. IV and following the current
+mission design, the onboard phasemeters track the phase
+(or, equivalently, the instantaneous frequency) of sampled
+and digitized versions of the MHz beatnotes using DPLLs
+running at 80 MHz.
+For performance reasons, we cannot simulate continuous
+analog signals nor DPLL signals at their real sampling rate.
+Instead, we use a discretized representation and rely on
+high-level models to capture the most significant effects. In
+our simulations, continuous quantities, as well as photo-
+receiver signals and beatnote measurements, are simulated
+at the physics rate
+f
+phy
+s ¼ 16 Hz: ð78Þ
+Note that this physics rate matches the penultimate down-
+sampling step of the real onboard decimation chain
+(described below), which is used by the DFACS.
+ADC & DPPL Downsampling Downsampling16 Hz
+Continous
+EM amplitude
+16 Hz
+Continous
+voltage
+16 Hz
+80 MHz
+beatnote phase
+(or frequency)
+16 Hz
+16 Hz
+beatnote phase
+used by DFACS
+4 Hz
+4 Hz
+telemetered
+beatnote phase
+Photoreceiver
+FIG. 6. Overview of the real signal sampling rates, from continuous optical and electrical signals, to the cascaded downsampled
+signals down to the telemetered 4 Hz data. We also indicate the sampling rates used in the simulation (in gray boxes) to represent these
+signals; continuous and high-frequency signals are represented by discrete 16 Hz simulated quantities, while the telemetry data is
+simulated at their true 4 Hz rate.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-13
+--- PAGE 14 ---
+2. Antialiasing filters
+The current mission design suggests that the raw 80 MHz
+phasemeter beatnote signals are then filtered and down-
+sampled to various lower sampling rates, and ultimately to
+the final measurement rate of 4 Hz. This last measurement
+sampling rate is in line with the mission instrument design,
+and compatible with the limited telemetry budget and the
+required bandwidth for on-ground processing. The 4 Hz
+data are then telemetered down to Earth.
+High-order digital low-pass finite impulse response
+(FIR) filters, as well as cascading filters, are expected to
+be used to prevent noise aliasing in the frequency band
+relevant for LISA data analysis, between 10
+−4 Hz and 1 Hz
+[33]. These filters must strongly attenuate the signals above
+the Nyquist frequency, while maintaining a gain close to
+unity and low phase distortion below 1 Hz. Their precise
+implementation is still under development.
+In the simulation, we use a single digital symmetrical
+FIR filter to go from f
+phy
+s to the final measurement
+sampling rate of
+fmeass ¼ 4 Hz: ð79Þ
+The default implementation of the antialiasing filter is
+described in Appendix D.
+3. Decimation
+Once the beatnote frequency measurements are filtered,
+we use a four-fold decimation (we select one sample out of
+four) to produce the final 4 Hz telemetry data. They are the
+main output of the simulation.
+Analytically, we model the filtering and downsampling
+step with the continuous, linear filter operator F, which is
+applied to the beatnote frequency measurements.
+B. Telemetered beatnote measurements
+We summarize here the downsampled, filtered beatnote
+measurements output by the phasemeter, i.e., the interspace-
+craft, test-mass, reference carrier and sideband beatnote
+frequencies. They are ultimately telemetered down to Earth.
+7
+1. Beatnote measurement notation
+For these beatnote measurements, we introduce a clear
+notation that uses the name of the associated interferometer
+and its index, complemented by the type of beam (carrier or
+sideband). The real phasemeter will only produce the total
+frequency or the total phase of the signal. For our studies,
+however, it is often useful to also have access to the
+underlying offsets and fluctuations in two separate varia-
+bles, which is why we give here the signals in this form.
+The simulation will provide an additional output for the
+total frequency, given as the sum of the two components.
+For readability ’s sake, we drop all time arguments. We
+use delay operators to account for time shifts that
+appear when propagating signals. We denote D
+12 the
+delay operator associated with the PPR do
+12ðτÞ defined in
+Sec. III E, such that for any signal sðτÞ,
+D12sðτÞ¼ sðτ − do
+12ðτÞÞ: ð80Þ
+Furthermore, we introduce the Doppler-delay operator,
+which is defined as
+_D12sðτÞ¼ð 1 − _do
+12ðτÞÞsðτ − do
+12ðτÞÞ: ð81Þ
+We also make use of the timestamping operators _Ti
+introduced in Sec. IV E, and the downsampling and filter-
+ing operator F.
+We will also use a shorthand notation for the beatnote
+frequency offsets in the TPS, which we define by
+ac
+12 ≡ νo
+isi12;c ¼ _D12O21 − ν0 _do
+12 − O12; ð82aÞ
+asb
+12 ≡ νo
+isi12;sb ¼ ac
+12 þ _D12½νm
+21ð1 þ _qo
+2 Þ/C138 − νm
+12ð1 þ _qo
+1 Þ;
+ð82bÞ
+bc
+12 ≡ νo
+rfi12;c ¼ O13 − O12; ð82cÞ
+bsb
+12 ≡ νo
+rfi12;sb ¼ bc
+12 þð νm
+13 − νm
+12Þð1 þ _qo
+1 Þ: ð82dÞ
+In addition, most of the laser-related terms p12, O12 will be
+determined by the laser-locking scheme, as described
+in Sec. VI.
+2. Interspacecraft interferometer beatnote frequencies
+The carrier-carrier beatnote frequency measurement in
+the ISIs contains the delayed distant and local laser
+frequency fluctuations _p
+21 and _p12, as well as the delayed
+distant and local optical-bench path length noises appearing
+as Doppler shifts _Nob
+isi12←21 and _Nob
+isi12←12. The effect of the
+gravitational-wave signal _H12 also appears as an extra
+Doppler shifts on the distant beam. Lastly, the readout
+_Nro
+isi12;c and clock noise ac
+12 _qϵ
+1=ð1 þ qo
+1 Þ terms are added.
+isio
+12;c ¼ F _T1ac
+12; ð83aÞ
+isiϵ
+12;c ¼ F _T1
+/C26
+_D12 _p21 − ðν0 þ D12O21Þ _H12
+þ ν0
+c
+_Nob
+isi12←21 −
+/C16
+_p12 þ ν0
+c
+_Nob
+isi12←12
+/C17
+þ _Nro
+isi12;c − ac
+12 _qϵ
+1
+1 þ _qo
+1
+/C27
+; ð83bÞ
+7As mentioned before, there are other data streams, such as the
+angular readouts provided by DWS, which we do not model here.
+The measured pseudorange (MPR) measurements are described
+in Sec. VII.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-14
+--- PAGE 15 ---
+isi12;c ¼ isio
+12;c þ isiϵ
+12;c: ð83cÞ
+The sideband-sideband beatnote frequency measurement is
+similar with two main differences. First, the distant and
+local laser frequency fluctuations are affected by the
+coupling of the modulation frequency with clock jitter
+and modulation noise ν
+m
+21ð _qϵ
+2 þ _M21Þ and νm
+12ð _qϵ
+1 þ _M12Þ.
+Secondly, the distant sideband beatnote frequency offsets
+are shifted by the modulation frequency affected by out-of-
+band clock errors νm
+21ð1 þ _qo
+2 Þ. Overall, we get
+isio
+12;sb ¼ F _T1asb
+12; ð84aÞ
+isiϵ
+12;sb ¼ F _T1
+/C26
+_D12ð _p21 þ νm
+21ð _qϵ
+2 þ _M21ÞÞ
+− ðν0 þ D12½O21 þ νm
+21ð1 þ _qo
+2 Þ/C138Þ _H12 þ ν0
+c
+_Nob
+isi12 ←21
+−
+/C18
+_p12 þ νm
+12ð _qϵ
+1 þ _M12Þþ ν0
+c
+_Nob
+isi12←21
+/C19
+þ _Nro
+isi12;sb − asb
+12 _qϵ
+1
+1 þ _qo
+1
+/C27
+; ð84bÞ
+isi12;sb ¼ isio
+12;sb þ isiϵ
+12;sb: ð84cÞ
+3. Reference interferometer beatnote frequencies
+The carrier-carrier beatnote frequency measurement in
+the RFIs contains the frequency fluctuations of the adjacent
+and local laser beams _p13 and _p12, as well as the associated
+optical-bench path length noises _Nob
+rfi12←13 and _Nob
+rfi12←12. The
+adjacent beam that travels through the optical fiber picks up
+the backlink noise _Nbl
+12. The readout _Nro
+rfi12 ;c and clock noise
+bc
+12 _qϵ
+1=ð1 þ qo
+1 Þ terms are then added,
+rfio
+12;c ¼ F _T1bc
+12; ð85aÞ
+rfiϵ
+12;c ¼ F _T1
+/C26
+_p13 þ ν0
+c ð _Nob
+rfi12←13 þ _Nbl
+12Þ
+−
+/C18
+_p12 þ ν0
+c
+_Nob
+rfi12←12
+/C19
+þ _Nro
+rfi12 ;c − bc
+12 _qϵ
+1
+1 þ _qo
+1
+/C27
+;
+ð85bÞ
+rfi12;c ¼ rfio
+12;c þ rfiϵ
+12;c: ð85cÞ
+The expression for the sideband-sideband beatnote fre-
+quency measurement follows the same logic, with the
+adjacent and local laser frequency fluctuations affected
+by the in-band clock and modulation noises ν
+m
+13ð _q1 þ _M13Þ
+and νm
+12ð _q1 þ _M12Þ,
+rfio
+12;sb ¼ F _T1bsb
+12; ð86aÞ
+rfiϵ
+12;sb ¼ F _T1
+/C26
+_p13 þ νm
+13ð _q1 þ _M13Þþ ν0
+c ð _Nob
+rfi12 ←13 þ _Nbl
+12Þ
+−
+/C18
+_p12 þ νm
+12ð _q1 þ _M12Þþ ν0
+c
+_Nob
+rfi12←12
+/C19
+þ _Nro
+rfi12 ;sb − bsb
+12 _qϵ
+1
+1 þ _qo
+1
+/C27
+; ð86bÞ
+rfio
+12;sb ¼ rfio
+12;sb þ rfiϵ
+12;sb: ð86cÞ
+4. Test-mass interferometer beatnote frequencies
+The carrier-carrier beatnote frequency measurements in
+the TMI have the same form as for the RFI, with the
+exception of the additional local test-mass noise term _Nδ
+12,
+tmio
+12;c ¼ F _T1bc
+12; ð87aÞ
+tmiϵ
+12;c ¼ F _T1
+/C26
+_p13 þ ν0
+c ð _Nob
+tmi12←13 þ _Nbl
+12Þ
+−
+/C18
+_p12 þ ν0
+c ð _Nob
+tmi12←12 þ 2 _Nδ
+12Þ
+/C19
+þ _Nro
+tmi12 ;c − bc
+12 _qϵ
+1
+1 þ _qo
+1
+/C27
+; ð87bÞ
+tmi12;c ¼ tmio
+12;c þ tmiϵ
+12;c: ð87cÞ
+As mentioned previously, we do not model sideband-
+sideband beatnote measurements in the TMIs.
+VI. LASER LOCKING AND FREQUENCY
+PLANNING
+As mentioned in Sec. III C, each laser source is either
+frequency-locked to a resonant cavity or phase locked
+to another laser source using a specific interferometric
+beatnote. In this section, we describe how we simulate
+these laser-locking control loops. We then list the various
+locking configurations available for LISA in its baseline
+configuration.
+A. Frequency planning
+The beatnote frequencies that can be measured by the
+LISA phasemeters are limited to between 5 MHz and
+25 MHz.
+8 As a consequence, all beatnote frequencies need
+to be controlled to fall in this range, which is achieved by
+introducing predetermined offset frequencies in the laser
+locking control loops. A set of these frequency offsets for
+all lasers over the whole mission duration is called a
+frequency plan .
+8The exact frequency range remains to be defined. In addition,
+some margins are required for both the upper and lower bounds to
+account for the sideband beatnotes, which are offset by 1 MHz
+from the carrier beatnotes.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-15
+--- PAGE 16 ---
+The problem of finding such frequency plans has
+recently been studied ( [34]), and exact solutions have been
+found. We will use these solutions as an input to the
+simulation.
+B. Locking condition
+Laser locking is achieved by controlling the frequency of
+a locked laser, such that a given beatnote frequency νPDðτÞ
+remains equal to a preprogrammed reference value νplanðτÞ
+provided in the frequency plan.
+We do not simulate the actual control loop, but instead
+directly compute the correct frequency offsets and fluctua-
+tions of the locked laser for this locking condition to be
+satisfied. In reality, the locking control loops will have
+finite gain and bandwidth, such that the locking beatnotes
+can still contain out-of-band glitches and noise residuals.
+Here, we consider the frequency lock to be perfect. This
+means that the locking beatnote offset is exactly equal to
+the desired value.
+Locking control loops run according to their local clocks,
+such that the locking condition is fulfilled in the local clock
+time frame ˆτ
+1. In addition, the frequency-plan locking
+frequencies are interpreted as functions of the same local
+clock time frame. In terms of total phase, the result of this
+control is that the measured beatnote phase is controlled to
+be exactly equal to the frequency-plan phase,
+Φ
+ˆτ1
+PDðτÞ¼ ΦplanðτÞ: ð88Þ
+Note that the control loop operates on data delivered by the
+phasemeter at a high frequency of 80 MHz ( [35]). As such,
+we simulate the locking before applying any filtering or
+downsampling.
+The previous locking condition is expressed in the local
+time frame, but we really want to solve for it in the TPS. We
+can use Eqs. (3), (51), and (53) to relate the measured
+beatnote phase to its equivalent in the TPS,
+Φτ1
+PDðτÞ¼ Φˆτ1
+PDðτ þ qo
+1 ðτÞþ qϵ
+1ðτÞþ δˆτ1;0Þ: ð89Þ
+Using this result, we can write the locking condition from
+Eq. (88) as
+Φτ1
+PDðτÞ¼ Φplanðτ þ qo
+1 ðτÞþ qϵ
+1ðτÞþ δˆτ1;0Þ: ð90Þ
+We expand the previous equation to first order in qϵ
+1ðτÞ,
+Φτ1
+PDðτÞ¼ Φplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ
+þ νplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þqϵ
+1ðτÞ: ð91Þ
+The second-order term is proportional to the product
+qϵ
+1ðτÞ2 _νplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ of the square of the clock
+fluctuations and the time derivative of the frequency-plan
+locking frequency. To evaluate the order of magnitude of
+this term, we compute the average clock time deviation [36]
+after a time corresponding to its saturation frequency
+(described in Appendix B); we find a value of the order
+of 10−9 s. In addition, all currently available frequency
+plans verify _νplanðτÞ < 3 Hz s−1. Therefore, we neglect
+terms of the order of 3 × 10−18 cycles, far below the
+μ-cycle level of gravitational-wave signals.
+From Eq. (91), one directly obtains the usual decom-
+position in phase drifts and fluctuations,
+ϕ τ1;o
+PD ðτÞ¼ Φplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ; ð92aÞ
+ϕ τ1;ϵ
+PD ðτÞ¼ νplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þqϵ
+1ðτÞ: ð92bÞ
+Indeed, the current baseline is to use piecewise linear
+functions with daily inflexions as frequency-plan locking
+frequencies. As a consequence, the latter are slowly
+varying, i.e., only consist in large out-of-band frequency
+offsets, such that ν
+planðτÞ¼ νo
+planðτÞ. This also applies to the
+preprogrammed reference phase ΦplanðτÞ¼ ϕ o
+planðτÞ.
+We denote the (local) locked laser phase drifts and
+fluctuations as ϕ τ1;o
+l ðτÞ and ϕ τ1;ϵ
+l ðτÞ, and the (distant or
+adjacent) reference laser phase drifts and fluctuations as
+ϕ τ1;o
+r ðτÞ and ϕ τ1;ϵ
+r ðτÞ. Using Eq. (37),w eh a v e
+ϕ τ1;o
+PD ðτÞ¼ ϕ τ1;o
+r ðτÞ − ϕ τ1;o
+l ðτÞ; ð93aÞ
+ϕ τ1;ϵ
+PD ðτÞ¼ ϕ τ1;ϵ
+r ðτÞ − ϕ τ1;ϵ
+l ðτÞþ Nro
+PDðτÞ: ð93bÞ
+It is now straightforward to write the resulting locked-laser
+phase drifts and fluctuations,
+ϕ τ1;o
+l ðτÞ¼ ϕ τ1;o
+r ðτÞ − Φplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ; ð94aÞ
+ϕ τ1;ϵ
+l ðτÞ¼ ϕ τ1;ϵ
+r ðτÞ − Φplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þqϵ
+1ðτÞ
+þ Nro
+PDðτÞ: ð94bÞ
+For frequency, we start by taking the derivative of Eq. (90)
+and expand it once again in qϵ
+1,
+ντ1
+PDðτÞ¼ð 1 þ _qo
+1 ðτÞÞνplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ
+þ νplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ _qϵ
+1ðτÞ
+þð 1 þ _qo
+1 ðτÞþ _qϵ
+1ðτÞÞ
+× _νplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þqϵ
+1ðτÞ: ð95Þ
+The last term of the previous equation has a similar form as
+the small correction neglected in Eq. (30b). We study such a
+term in Appendix C and find that it is several orders of
+magnitude below the main noise term. Therefore, we will
+neglect it in the rest of this derivation.
+Using the same two-variable decomposition along with
+the frequency equivalent of Eq. (93),
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-16
+--- PAGE 17 ---
+ντ1;o
+PD ðτÞ¼ ντ1;o
+r ðτÞ − ντ1;o
+l ðτÞ; ð96aÞ
+ντ1;ϵ
+PD ðτÞ¼ ντ1;ϵ
+r ðτÞ − ντ1;ϵ
+l ðτÞþ _Nro
+PDðτÞ; ð96bÞ
+we finally obtain the resulting locked-laser frequency offset
+and fluctuations,
+ντ1;o
+l ðτÞ¼ ντ1;o
+r ðτÞ − ð1 þ _qo
+1 ðτÞÞ
+× νplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ; ð97aÞ
+ντ1;ϵ
+l ðτÞ¼ ντ1;ϵ
+r ðτÞ − νplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ
+× _qϵ
+1ðτÞþ _Nro
+PDðτÞ: ð97bÞ
+Note that these equations describe the locked laser at the
+photodiode. To properly simulate this effect, we need the
+locked lasers frequency at the laser source , which we
+denote here as ¯νlðτÞ. In Sec. III C, we add to the local beam
+frequency fluctuations an optical path length noise term
+_Nob
+PDðτÞ during its propagation from the laser source to the
+photodiode. As a consequence, we have
+¯νϵ
+l ðτÞ¼ νϵrðτÞ − νplanðτ þ qo
+1 ðτÞþ δˆτ1;0Þ _qϵ
+1ðτÞ
+þ _Nro
+PDðτÞ − ν0
+c
+_Nob
+PDðτÞð 98Þ
+for the local locked-laser fluctuations.
+C. Locking configurations
+In total, 5 of the 6 lasers in the constellation are locked
+(directly or indirectly) to one primary laser . Each of the
+locked lasers is locked to either the adjacent laser, using the
+RFI, so that Eqs. (97a) and (98) read
+O
+12ðτÞ¼ νo
+rfi12←13ðτÞ − ð1 þ _qo
+1 ðτÞÞ
+× νfplan;rfi12 ðτ þ qo
+1 ðτÞþ δˆτ1;0Þ; ð99aÞ
+_p12ðτÞ¼ νϵ
+rfi12 ←13ðτÞ − νfplan;rfi12 ðτ þ qo
+1 ðτÞþ δˆτ1;0Þ _qϵ
+1ðτÞ
+þ _Nro
+rfi12 ðτÞ − ν0
+c
+_Nob
+rfi12←12ðτÞ; ð99bÞ
+or to the distant laser, using the ISI, such that we get
+O12ðτÞ¼ νo
+isi12←21ðτÞ − ð1 þ _qo
+1 ðτÞÞ
+× νfplan;isi12 ðτ þ qo
+1 ðτÞþ δˆτ1;0Þ; ð100aÞ
+_p12ðτÞ¼ νϵ
+isi12←21ðτÞ − νfplan;isi12 ðτ þ qo
+1 ðτÞþ δˆτ1;0Þ _qϵ
+1ðτÞ
+þ _Nro
+isi12 ðτÞ − ν0
+c
+_Nob
+isi12 ←12ðτÞ: ð100bÞ
+These expressions can be substituted into the equations of
+Sec. VB to derive the telemetered beatnote measurements
+with locked lasers.
+SC 1
+SC 2
+SC 3
+LA 31
+LA 13
+LA 12LA 21
+LA 23
+LA 32
+N6-12
+SC 1
+SC 2
+SC 3
+LA 31
+LA 13
+LA 12LA 21
+LA 23
+LA 32
+N5-12
+SC 1
+SC 2
+SC 3
+LA 31
+LA 13
+LA 12LA 21
+LA 23
+LA 32
+N4-12
+SC 1
+SC 2
+SC 3
+LA 31
+LA 13
+LA 12LA 21
+LA 23
+LA 32
+N3-12
+SC 1
+SC 2
+SC 3
+LA 31
+LA 13
+LA 12LA 21
+LA 23
+LA 32
+N2-12
+SC 1
+SC 2
+SC 3
+LA 31
+LA 13
+LA 12LA 21
+LA 23
+LA 32
+N1-12
+FIG. 7. Laser-locking configurations for laser 12 as primary laser.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-17
+--- PAGE 18 ---
+The LISA model presented here permits six distinct
+locking topologies. For each of them, we have the freedom
+to choose the primary laser, such that, in total, we have 36
+possible locking configurations . We plot the six configu-
+rations with laser 12 as the primary laser in Fig. 7. The
+other 30 combinations can be deduced by applying
+permutations of the indices.
+VII. PSEUDORANGING
+In addition to the GHz sideband modulation, each laser
+beam will also carry an additional modulation with a
+predetermined pseudorandom noise (PRN) code used for
+absolute ranging and timing synchronization. The basic
+measurement principle is to correlate the received PRN
+code in each ISI with a local copy generated on the
+receiving spacecraft. The result of this measurement is
+the measured pseudorange (MPR), which contains infor-
+mation on both the light travel time between the spacecraft
+and the clock desynchronization.
+A. Pseudoranging modulation
+The PRN modulation is performed at a relatively high
+frequency of around 2 MHz, far outside our simulation
+bandwidth. We therefore do not model the actual phase
+modulation. This modulation also causes a small addi-
+tional noise in our measurement band, at a level below
+1 pm Hz
+−0.5 in units of displacement [37], which we do not
+model. In addition, we only model the PRN measurement
+in the ISI, and completely ignore the presence of the PRN
+codes in the other interferometers.
+Instead, we model this measurement by directly propa-
+gating the time deviations of each spacecraft timer with
+respect to their TPSs, alongside the laser beams. The MPR
+is then computed as the difference between the received and
+local timer.
+Similarly to the main interferometric measurements and
+as described in Sec. VA, pseudoranging simulation is
+performed at f
+phy
+s , while the MPRs are ultimately filtered
+and downsampled to a lower rate fmeass .
+B. Pseudoranging as a clock-time difference
+We consider in the following paragraphs a beam received
+by optical bench 12 at the receiver TPS τ, which was
+emitted from optical bench 21 at emitter TPS τ − d12ðτÞ.
+Here, the PPR d12ðτÞ contains the light time of flight, as
+well as the conversion between the two proper times.
+Conceptually, the MPR measures the pseudorange, given
+as the difference between the time ˆττ1
+1 ðτÞ shown by the local
+clock of the receiving spacecraft at the event of reception of
+the beam, and the time ˆττ2
+2 ðτ − d12ðτÞÞ shown by the local
+clock of the sending spacecraft at the event of emission of
+the beam. In reality, the MPR only measures the pseudor-
+ange up to the repetition period of the PRN code, which is
+around 1 ms. The full pseudorange is then recovered by
+combining the MPR measurements with ground-based
+observations.
+At the moment, we do not simulate this effect and
+assume that the MPR directly gives the pseudorange
+without ambiguity. In addition, we assume that the vacuum
+between the satellites is sufficiently good that we can
+neglect (or compensate for) any dispersion effects, such
+that the PRN code suffers exactly the same delay as the
+carrier and sidebands.
+Thus, we can model the MPR as the difference
+R
+12ðτÞ¼ ˆτ1ðτÞ − ˆτ2ðτ − d12ðτÞÞ þ NR
+12ðτÞ; ð101Þ
+where NR
+12ðτÞ is a ranging noise term modeling imperfec-
+tions in the overall correlation scheme.
+C. Pseudoranging in terms of timer deviations
+As explained in Sec. IV D, we do not simulate the total
+clock time ˆτ1ðτÞ for each spacecraft, but only deviations
+δˆτ1ðτÞ from the associated TPS,
+ˆτ1ðτÞ¼ τ þ δˆτ1ðτÞ and ˆτ2ðτÞ¼ τ þ δˆτ2ðτÞ: ð102Þ
+Inserting these definitions into Eq. (101) yields
+R12ðτÞ¼ δˆτ1ðτÞ − ½δˆτ2ðτ − d12ðτÞÞ − d12ðτÞ/C138 þ NR
+12ðτÞ:
+ð103Þ
+Let us define the clock time of the sending spacecraft
+propagated to the photodiode of the distant interspacecraft
+interferometer as
+δˆτisi12←2ðτÞ ≈ δˆτ3ðτ − d12ðτÞÞ − d12ðτÞ: ð104Þ
+We can then express the MPR as the simple difference
+R12ðτÞ ≈ δˆτ1ðτÞ − δˆτisi12←2ðτÞþ NR
+12ðτÞ: ð105Þ
+In our simulation, we make the additional assumption that
+d12 ≈ do
+12 for this measurement. This is valid since the
+terms contained in dϵ
+12 (in our simulation model, only H12)
+create timing jitters much less than a nanosecond.
+Notice that in Eq. (105), we compute the MPR as a
+function of the receiving TPSs, so that formally R12 ¼ Rτ1
+12.
+In reality, the MPR is measured according to the clock time
+of the receiving spacecraft, Rˆτ1
+12. Similarly to all other
+measurements, we simulate this by first generating Rτ1
+12 and
+then resampling the resulting time series to obtain Rˆτ1
+12,a s
+described in Sec. IV E.
+VIII. IMPLEMENTATION
+The model presented in the previous sections has been
+implemented independently in two LISA Consortium
+simulators, namely LISA I nstrument and LISANode.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-18
+--- PAGE 19 ---
+In this section, we briefly describe the structure of both
+simulators and highlight the key differences between them.
+Results obtained from these simulators are presented
+in Sec. IX.
+A.
+LISA I nstrument
+LISA Instrument [38] is a Python-based implementation of the
+simulation model described in this paper. It is designed
+to facilitate fast exploratory studies, run quick or partial
+simulations (instrumental effects and noises can easily be
+toggled on and off), and prototype new features.
+LISA I nstrument ships as a standalone Python package. As a
+consequence, it is easy to install, use, and integrate in
+traditional workflows, such as Jupyter Notebooks. LISA
+Instrument does not require a custom installation and can
+be used out-of-the-box on most computing clusters.
+LISA I nstrument relies strongly on traditional numerical
+libraries, such as NumPy and SciPy [39,40], and therefore
+benefits from fast optimized vectorized operations as it
+handles large arrays of data. Its runtime performance is
+studied and compared to that of LISANode in Fig. 9.
+LISA I nstrument runs stage-by-stage simulations, where
+time series are generated for the entire simulation duration
+at each stage. The main stages of a simulation are
+represented in Fig. 8. First, time series are generated
+for all noises enabled in the simulation, following the
+prescription of Appendix B.
+LISA I nstrument uses FIR and
+cascaded RC filters [41] to generate the noise time series.
+Then, local beam frequencies are computed (see
+Sec. III C). Local beams from locked-laser sources are
+obtained by substituting the results of locking condition
+equations found in Sec. VI C. These local beams are then
+propagated to obtain the adjacent and distant beam
+frequency time series (see Secs. III D and III E). Optical
+beatnotes and measured beatnote frequencies are obtained
+from the equations derived in Secs. III F and IV. MPRs are
+also computed according to the model described in
+Sec. VII. At this point, both beatnote frequencies and
+TELEMETERED BEATNOTES & MPRs
+FILTER AND DOWNSAMPLE MEASUREMENTS
+RESAMPLE MEASUREMENTS TO CLOCK TIME FRAMES
+COMPUTE OPTICAL BEATNOTES,
+MEASURED BEATNOTE FREQUENCIES AND MPRs
+PROPAGATE LOCAL BEAMS TO ADJACENT
+AND DISTANT MOSAs
+GENERATE LOCAL BEAMS
+GENERATE NOISE TIME SERIES
+FIG. 8. LISA I nstrument simulation workflow. At each stage,
+entire time series are generated. In the end, the simulation
+products comprise the telemetered beatnotes and the MPRs.
+FIG. 9. Runtime and memory performance of LISA Instrument (in blue) and LISANode (in yellow, orange, and red for the various compiler
+optimization levels), for three instrumental configurations of increasing complexity (from left to right) and simulations durations.
+Dashed lines are used for extrapolated data.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-19
+--- PAGE 20 ---
+MPRs are expressed as functions of their respective TPSs;
+they are resampled at the next stage to their associated
+clock time frames, following the methodology given in
+Sec. IV E. Finally, all measurements are filtered and
+downsampled (cf. Sec. VA) to obtain the telemetered
+beatnote frequencies and MPR measurements described in
+Sec. VB .
+A downside of this simple implementation is that
+memory usage increases drastically with the simulation
+length. Memory pressure can become limiting for long
+simulations (typically more than a few months, see
+Sec. VIII C) if many noises and instrumental effects are
+enabled. The alternative implementation of the same
+simulation model, described in the next section, is overall
+less flexible but is optimized for long simulations.
+B.
+LISANode
+LISANode [42,43] is a simulation framework that allows
+the user to build modular simulation graphs out of atomic
+computational units, called nodes. This is realized using a
+mix of
+Python and C++, where the Python code is responsible
+for defining the graph structure and interconnecting the
+different nodes. The nodes themselves are implemented in
+C++, such that the final executable is a C++ command line
+program.
+Using C++ offers the advantage that compiler optimiza-
+tions produce a fast executable, and allows us to reuse
+legacy code from previous C++ LISA simulators, such as
+LISACode [21]. Naturally, the cost is reduced readability,
+usability, and slower development times. Another conse-
+quence is that
+LISANode needs to be compiled on each
+machine it runs. To work around this last difficulty, we offer
+containerization solutions, in the form of Docker and
+Singularity images that contain optimized compiled ver-
+sions of
+LISANode along with the software environment
+necessary to run them. These images can be downloaded
+and used on local machines and on most computing
+infrastructures, and do not hinder the runtime performance
+of the simulations.
+In
+LISA I nstrument, data is generated for the whole
+simulation length. On the contrary, LISANode creates data
+one step at a time: a sample at time tn is computed for all
+quantities before repeating the same instructions for the
+next samples tnþ1. New samples are therefore simulated on
+the fly, keeping only in memory the data that is required for
+the current and future samples. This way, memory usage
+remains roughly constant regardless of the simulation
+length (see Sec. VIII C). This allows long simulations to
+run on memory-constrained machines.
+C. Runtime and memory performance
+We evaluate the runtime and memory performance
+of
+LISA I nstrument and LISANode for three instrumental
+configurations of increasing complexity. In the simple
+configuration, all noises but laser noise are neglected.
+Most instrument effects are disabled, as we use a static
+constellation with constant arm lengths, do not lock the
+lasers, assume perfect clocks, and set fmeass ¼ fphy
+s ¼ 4 Hz
+(no filtering or downsampling). In the intermediate con-
+figuration, all noises and effects are activated except for
+clock errors (no resampling of the measurement to clock
+time frames). We use realistic orbits and frequency plan for
+the locking configuration N1-12. We filter all measure-
+ments and use the nominal sampling frequencies described
+in Sec. VA. Lastly, the full configuration includes the
+effects of imperfect clocks.
+We run simulations of increasing durations, ranging from
+1h( 1.4 × 10
+4 telemetered samples at 4 Hz for each
+channel) to 6 months ( 6.2 × 107 samples). Missing points
+indicates that the simulation did not complete on our
+test machine (MacBook Pro M1, 2021, 64 GB of RAM)
+because of excessive memory pressure or runtime. We
+extrapolate the results to 1 year (dashed lines) using a linear
+(
+LISANode) or quadratic ( LISA I nstrument) fit to the existing
+data points.
+We used the latest version of LISA I nstrument and
+LISANode, and compiled three different LISANode execut-
+ables to study the impact of optimizations; one with no
+compiler optimization (compiler flag -O0), one with
+some optimizations ( -O1), and one with most optimiza-
+tions ( -O2) enabled. In each case, we measure the
+runtime and peak memory usage. Results are reported
+in Fig. 9. Note that we do not include compilation time
+for
+LISANode in these figures, which strongly depends on
+the chosen optimization level (around 5 s for -O0,1m i n
+for -O1, and 10 min for -O2).
+In terms of runtime, as expected, LISA I nstrument is
+significantly (up to several orders of magnitude) faster
+for simple simulations. For intermediary configurations,
+LISA I nstrument remains faster than LISANode up to simulation
+length of a month. Considering full instrumental configu-
+rations, highly-optimized versions of
+LISANode are faster
+than LISA I nstrument irrespective of simulation duration. This
+is especially true for simulations longer than a month,
+where
+LISANode runs roughly twice as fast. In addition,
+memory usage can become limiting for simulations of a day
+or longer on typical machines with a few GB of memory
+when using
+LISA I nstrument. LISANode caps memory peak
+usage to low values of about 100 MB irrespective of the
+simulation length.
+D. Simulation parameters and simulation products
+For reference, we give in Table I the list of options
+accepted by
+LISA I nstrument to configure the simulations.
+They parametrize the instrumental configuration (type of
+orbits, choice of a laser locking configuration, design of
+the onboard filters, etc.), the various noise models (noise
+amplitudes and spectral shapes), and the length of the
+simulation. Note that similar options can be used with
+LISANode, with some slight variations in their names.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-20
+--- PAGE 21 ---
+TABLE I. Simulation parameters available to configure LISA I nstrument, alongside with their units and reference sections.
+Parameter Description Unit Reference
+size Number of samples to simulate /C1/C1/C1 /C1/C1/C1
+dt Measurement sampling period fmeass s Section VA
+t0 Initial simulation time s /C1/C1/C1
+physics_upsampling Ratio fphy
+s =fmeass of physics and measurement sampling frequencies /C1/C1/C1 Section VA
+clockinv_tolerance Convergence criterion for clock noise inversion s Section IV E
+clockinv_maxiter Maximum number of iterations for clock noise inversion /C1/C1/C1 Section IV E
+aafilter Antialiasing filter design specifications /C1/C1/C1 Section VA
+orbits Path to orbit file, or PPRs do
+ijðτÞ s Section III E
+gws Path to gravitational-wave file, or link responses HijðτÞ/C1 /C1 /C1 Section III E
+lock Laser locking configuration (e.g., N1-12) /C1/C1/C1 Section VI
+fplan Path to frequency-plan file, or locking beatnote frequencies νPD;rðτÞ Hz Section VI
+central_freq Laser central frequency ν0 Hz Section III B
+laser_asds Laser noise amplitude spectral density (ASD) Hz Hz −0.5 Appendix B
+modulation_asds Modulation noise ASD sH z−0.5 Appendix B
+modulation_freqs Modulation frequencies νm
+ij Hz Section III C
+clock_asds Clock noise ASD Hz−0.5 Appendix B
+clock_offsets Clock offsets δˆτi;0 from TPS τi s Section IV D
+clock_freqoffsets Clock frequency offsets yi;0 s−1 Appendix B
+clock_freqlindrifts Clock frequency linear drifts yi;1 s−2 Appendix B
+clock_freqquaddrifts Clock frequency quadratic drifts yi;2 s−3 Appendix B
+backlink_asds Backlink noise ASD mH z−0.5 Appendix B
+backlink_fknees Backlink noise knee frequency Hz Appendix B
+testmass_asds Test-mass noise ASD ms −2 Hz−0.5 Appendix B
+testmass_fknees Test-mass noise knee frequency Hz Appendix B
+oms_asds Readout noise ASD mH z−0.5 Appendix B
+oms_fknees Readout noise knee frequency Hz Appendix B
+ranging_biases Ranging systematic bias NR;o
+i s Appendix B
+ranging_asds Ranging noise ASD sH z−0.5 Appendix B
+TABLE II. Simulation products, alongside their units, and reference equations. All quantities are output at the
+measurement sampling rate fmeass .
+Dataset Description Unit Reference
+isi_carrier_offsets ISI carrier beatnote frequency offsets Hz Equation (83a)
+isi_carrier_fluctuations ISI carrier beatnote frequency fluctuations Hz Equation (83b)
+isi_carriers ISI carrier beatnote total frequency Hz Equation (83c)
+isi_usb_offsets ISI upper-sideband beatnote frequency offsets Hz Equation (84a)
+isi_usb_fluctuations ISI upper-sideband beatnote frequency fluctuations Hz Equation (84b)
+isi_usbs ISI upper-sideband beatnote total frequency Hz Equation (84c)
+rfi_carrier_offsets RFI carrier beatnote frequency offsets Hz Equation (85a)
+rfi_carrier_fluctuations RFI carrier beatnote frequency fluctuations Hz Equation (85b)
+rfi_carriers RFI carrier beatnote total frequency Hz Equation (85c)
+rfi_usb_offsets RFI upper-sideband beatnote frequency offsets Hz Equation (86a)
+rfi_usb_fluctuations RFI upper-sideband beatnote frequency fluctuations Hz Equation (86b)
+rfi_usbs RFI upper-sideband beatnote total frequency Hz Equation (86c)
+tmi_carrier_offsets TMI carrier beatnote frequency offsets Hz Equation (85a)
+tmi_carrier_fluctuations TMI carrier beatnote frequency fluctuations Hz Equation (87b)
+tmi_carriers TMI carrier beatnote total frequency Hz Equation (87c)
+mprs MPRs s Equation (105)
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-21
+--- PAGE 22 ---
+We also list in Table II the quantities output by both
+simulators, alongside their units, and reference equations.
+IX. RESULTS AND DISCUSSION
+An example code snippet for simple simulation and on-
+ground processing is given in Appendix E for the current
+versions ofLISA Instrument and PyTDI. In the following sections,
+we describe the results of more complete simulations.
+A. Telemetry measurements
+We present here the results of numerical simulations
+performed with LISA I nstrument. The simulations include
+all noises described in the previous sections, in addition to
+a gravitational-wave signal from the loudest verification
+binary listed in [44]. Its orbital period is about 569.4 s and its
+4-year signal-to-noise ratio (SNR) is estimated at 113. We
+simulated three days (about 10
+6 s) of measurements at the
+f i n a lr a t eo ffmeass ¼ 4 Hz. We have scaled the amplitude of
+the gravitational-wave signal such that its 3-day SNR
+matches the expected 4-year SNR. The light travel times
+between the spacecraft are computed from orbits files
+provided by ESA [24]. They are treated as time varying
+but remain roughly constant over the simulation duration,
+with values for each link between 8.17 s and 8.32 s. Lasers are
+locked in the N1-12 configuration (cf. Sec. VI)w i t ha
+frequency plan computed accordingly ( [45]).
+Fig. 10 shows the time evolution of the six ISI beatnotes
+in terms of total frequency. In the chosen locking configu-
+ration, ISI 31 and 21 beatnotes (in green and brown,
+respectively) are locking beatnotes, and therefore are
+piecewise linear functions entirely determined by the
+frequency plan (cf. Sec. VI). They do not contain any
+noise since we assume a perfect laser phase-lock loop at the
+frequencies we study. Conversely, the remaining ISI
+beatnotes (in blue, orange, red, and purple) are nonlocking.
+Therefore, they have large MHz trends driven by the
+frequency plan and the relative motion of the spacecraft,
+in addition to a number of noises, dominated by the
+∼30 Hz Hz
+−0.5 laser noise.
+As expected, the frequency plan ensures that the beat-
+notes remain in the valid range of the phasemeter, i.e.,
+between 5 MHz and 25 MHz in absolute value.
+The amplitude spectral densities of all carrier beatnote
+frequency fluctuations are presented in Fig. 11. We used a
+Python implementation the log-scale power spectral density
+(LPSD) method [46] developed by C. V orndamme with
+Kaiser windows. We overlay the 10 pm noise reference
+curve (in black), which is a typical target noise level for
+metrology noise in a single LISA link [16]. Its power
+spectral density (PSD) in units of frequency reads
+/C18
+2πf
+1064 nm
+10 pmﬃﬃﬃﬃﬃﬃ ﬃ
+HZ
+p
+/C19 2
+½1 þð 2 mHZ fÞ4/C138 : ð106Þ
+We expect test-mass acceleration noise to remain above this
+reference curve at low frequencies.
+The nonlocking ISI beatnotes (blue lines) are dominated
+by laser noise (at about 30 HzHz−0.5), only modulated by
+the one or two-way transfer function. Further processing is
+required to reduce this laser noise to below the noise
+requirements, which will reveal the presence on the injected
+gravitational-wave signal, cf. Sec. IX B.
+Nonlocking RFI beatnotes (orange lines) contain mostly
+readout noises, and therefore remain below the 10 pm noise
+reference curve (refer to Appendix B for the noise models
+used in the simulation). Nonlocking TMI beatnotes (purple
+lines) contain, in addition to the same readout noises, test-
+mass acceleration noises, which become dominant below
+∼5 mHz. At these frequencies, the test-mass acceleration
+noise is clearly above the noise reference curve, as
+expected. At higher frequencies, we see that the different
+TMIs have different noise levels. On optical benches where
+the RFI is used for locking most common noises in the
+beams cancel, and the TMI is dominated by its own readout
+noise only. On the adjacent optical benches, on the other
+hand, we see an increased noise level due to the fiber
+backlink noise added to the locked laser during propagation
+between the benches.
+ISI and RFI locking beatnotes are represented as plain
+red lines. Since we assume perfect laser phase-lock loops,
+these beatnotes should be vanishing, and we measure here
+the numerical noise floor of our simulations at about
+10
+−12 HzHz−0.5, well below the expected gravitational-
+wave signals at about ν0 × 10−21 ≈ 10−7 Hz. Such a low-
+numerical noise floor can be achieved despite the large
+FIG. 10. Time series of the ISI carrier beatnote frequencies.
+Locking ISI carrier beatnote frequencies (green 31 and brown 21)
+are piecewise linear functions driven by the frequency plan, free
+of any small fluctuations (c.f. left focus on 31). Nonlocking ISI
+carrier beatnotes (blue 12, orange 23, red 13, and purple 32) have
+large trends driven by the frequency plan and Doppler effect, and
+small in-band fluctuations (cf. right focus on 32).
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-22
+--- PAGE 23 ---
+dynamic range of the quantities in play thanks to the two-
+variable decomposition described in Sec. III B 3 (the
+precision of beatnote frequency fluctuations are only
+limited by the magnitude of the laser noise).
+We compare these results to what can be obtained with a
+single-variable model. The same nonlocking beatnote
+fluctuations have been computed by linearly detrending
+the total beatnote frequencies (to remove large out-of-band
+trends), and are plotted as dashed red lines. We see a
+numerical noise floor between 10
+−8 and 10−9 HzHz−0.5,
+leaving little margin with respect to the expected magnitude
+of the gravitational signals and secondary noises that we
+wish to simulate and study.
+Next, Fig. 12 shows time series of the six MPRs, as
+described in Sec. VII. In addition to the expected light travel
+times of about 8 s, we can observe that they also include the
+differential initial timer offsets (of a few seconds) and clock
+drifts (a few tens of milliseconds per day).
+Finally, we show in Fig. 13 the PSDs of the different
+clock-noise-related measurements we simulate, all con-
+verted to units of s Hz
+−0.5. The MPR (blue) is dominated
+by a white noise down to the lowest frequencies. Around
+0.1 mHz to 0.3 mHz, the noise level coincides with that of
+the clock noise measured by the ISI sideband measurements
+(orange). Here, we plot a signal combination rejecting
+common mode noise between carrier and sideband, follow-
+ing Eq. (B1) of Ref. [32], such that the plotted curve is
+dominated by the actual clock noise at most of the frequency
+band. Similarly, using Eq. (B9) of Ref.[32], we can combine
+the RFI sideband beatnotes to give a measurement of the
+larger of the two modulation noise terms, labeled ΔM
+1
+(green). We see that the modulation noise is orders of
+magnitude smaller than the clock noise in most of the band.
+FIG. 11. Amplitude spectral densities of all carrier beatnote frequency fluctuations. Nonlocking ISI beatnotes (blue lines) are
+dominated by laser noise, while nonlocking RFI and TMI beatnotes (orange and purple lines) contain mostly readout and test-mass
+acceleration noises. The 10 pm reference curve is represented as a bold black line. Locking beatnotes (plain red lines) should be
+vanishing, but represent here the numerical noise floor at about 10
+−12 HzHz−0.5. Nonlocking beatnote fluctuations computed from the
+total beatnote frequencies (dashed red lines) have a 1000x larger numerical noise floor and contain other numerical artifacts.
+FIG. 12. Time series of the MPRs. We can observe large
+deterministic errors with respect to the expected light travel time
+of ≈8 s due to initial timer offsets and clock drifts.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-23
+--- PAGE 24 ---
+B. Processed measurements
+We have seen that the raw telemetered beatnotes can be
+grouped in three categories. Locking beatnotes do not
+contain any gravitational-wave signal or noise (assuming
+perfect laser locking) and are dominated by numerical
+noises in our simulations. Nonlocking RFI beatnotes are
+also signal free and are dominated by secondary (readout
+and test-mass) noises. Only nonlocking ISI beatnotes carry
+useful gravitational-wave information, but contain laser
+noise at many orders of magnitude above the expected
+signals, alongside other noise sources.
+In order to detect and analyze the gravitational-wave
+signals, we must therefore reduce these sources of noise to
+reasonable levels. This is achieved by a processing tech-
+nique called TDI, in which multiple interferometric read-
+outs are time shifted and combined to cancel the main noise
+sources.
+To demonstrate that this kind of processing is possible
+using our simulated data, we apply the algorithm described
+in [32], using
+PyTDI [47], to reduce the limiting noise
+sources included in our simulation (laser and clock noise)
+to below the required level. Fig. 14 shows the spectra of the
+second-generation TDI combinations X2, Y2, and Z2,i n
+which the laser and clock noises have been suppressed. The
+gravitational-wave signal is clearly visible at the expected
+frequency of 3.5 mHz, with an SNR of about 100.
+Following the conclusions of [32], the biggest contrib-
+utors to the residual noise are the ISI readout noise at high
+frequencies and the test-mass acceleration noise at low
+frequencies; other nonsuppressed noise sources have a
+smaller but non-negligible contribution.
+X. CONCLUSION
+In this paper, we proposed a model of the LISA
+measurement chain, which includes the propagation of
+optical signals (modulated laser beams, each containing a
+carrier and an upper sideband) across the constellation and
+on the optical benches; the phase readout of the different
+interferometers; as well as the on-board processing of
+the beatnote signals. We also included a high-level model
+for the MPR auxiliary measurements, which are used to
+estimate the interspacecraft distances, necessary for the on-
+ground processing (such as TDI). This model accounts for
+laser-locking control loops, and properly treats different
+time frames and clock errors.
+We presented two implementations of the model, along
+with a comparison of their runtime and memory perfor-
+mance that highlights their respective advantages and
+drawbacks.
+LISA I nstrument is a Python implementation that
+is easy to use, and very efficient for short simulations (a few
+months or less), while we recommend
+LISANode for longer
+and more complex simulations.
+Some results obtained with LISA I nstrument are presented
+to demonstrate the correctness of the implementation. In
+particular, we check that the beatnote measurements exhibit
+the expected behavior, in terms of total frequency or
+frequency fluctuations. For the latter, we show that our
+model keeps numerical noise to acceptable levels for the
+study of instrumental noises and gravitational-wave sig-
+nals. We also check that laser and clock noise reduction by
+TDI performs as expected by computing the second-
+generation Michelson combinations. We confirm that the
+residual noises in these channels matches their expected
+levels, and that a typical gravitational signal hidden in the
+raw telemetry data becomes clearly apparent at the
+expected frequency and magnitude.
+The injection of gravitational-wave signals is possible
+through the multiple interfaces of
+LISA I nstrument and
+LISANode with other simulation tools. These tools include
+in particular LISA O rbits [24] for realistic spacecraft orbits,
+LISA G litch [48] for injection of instrumental artifacts, LISA
+GW Response [49] for injection of gravitational signals, and
+PyTDI [47] for further on-ground processing.
+At the time this paper is written, some important instru-
+mental effects are still under development. While some of
+FIG. 13. PSDs of clock-noise related measurements. We plot
+the MPR (blue line) alongside measurements derived from the ISI
+sidebands (orange line) and the RFI sidebands (green line). See
+main text for details.
+FIG. 14. Amplitude spectral densities of second-generation
+TDI combinations X
+2, Y2, and Z2. Note that laser noise, over-
+whelming in the telemetered beatnote frequencies, is suppressed
+by many orders of magnitude, such that the injected verification
+binary (SNR of 113) is now clearly visible around 3.5 mHz.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-24
+--- PAGE 25 ---
+them are already implemented in the simulation, we do not
+include them in this description of the model but refer to
+future dedicated publications. In particular, we do not
+include any dynamical effects or dynamical control loops
+to actuate on the spacecraft and test masses [50]. We also do
+not include tilt-to-length effects, which occur as an appar-
+ent path length change due to any misalignment of optical
+elements and that will be partially mitigated on ground
+using DWS measurements [51]. We do not simulate any of
+the ground-based observations that will be used to deter-
+mine the spacecraft positions and velocities, as well as the
+offsets of the onboard clocks with respect to a global
+timescale. These are required inputs to the further process-
+ing and data analysis steps, and therefore will be included
+in a future version of the simulation.
+Finally, we currently produce phasemeter measurements
+expressed as total frequencies in Hz. There are ongoing
+discussions to choose the best representation for telemetry
+data; in order to capture any effects related to this choice,
+we plan to update the simulators to use the official data
+format once it is agreed upon. In particular, if phase data
+must be produced, the model should be updated to include
+an initial phase for each optical beam and clock signal,
+which do not affect the current frequency data.
+ACKNOWLEDGMENTS
+The authors thank the LISA Simulation Working Group
+and the LISA Simulation Expert Group for the lively
+discussions on all simulation-related activities. They would
+like to personally thank A. Petiteau, G. Heinzel, V . Müller,
+A. Hees, M. Staab, and J. N. Reinhardt for their insightful
+feedbacks. J. B. B. gratefully acknowledges support from
+UK Space Agency (Grant No. ST/X002136/1), the Centre
+National d ’Études Spatiales (CNES), the Central National
+pour la Recherche Scientifique (CNRS) and the Universit´ e
+Paris-Diderot. J. B. B. has been supported by an appointment
+to the NASA Postdoctoral Program at the Jet Propulsion
+Laboratory, California Institute of Technology, administered
+by Universities Space Research Association under contract
+with NASA. Part of this research was carried out at the Jet
+Propulsion Laboratory, California Institute of Technology,
+under a contract with the National Aeronautics and
+Space Administration (80NM0018D0004). O. H. gratefully
+acknowledges support by Centre National d’Études Spatiales
+(CNES) and by the Deutsches Zentrum für Luft- und
+Raumfahrt (DLR, German Space Agency) with funding
+from the Federal Ministry for Economic Affairs and Energy
+based on a resolution of the German Bundestag (Projects
+Ref. No. 50OQ1601 and No. 50OQ1801). This work was
+supported by the Programme National GRAM of CNRS/
+INSU with INP and IN2P3 cofunded by CNES.
+APPENDIX A: SYMBOL GLOSSARY
+This paper defines a large number of quantities and uses
+or introduces many symbols to represent them. To facilitate
+the reading, we have listed the main conventions in
+Table III and the main quantities in Table IV.
+APPENDIX B: NOISE MODELS
+We describe here the different noise sources that we
+include in our simulations. For each noise, we give a short
+description and its mathematical expression. That includes
+spectral shapes in the form of their PSD for stochastic
+terms, as well as any deterministic effects.
+Noise models are derived from allocations or current best
+estimates (CBEs) given in the performance model ( [52]),
+where applicable.
+9
+We give here a continuous description of these noise
+models; however, they are actually implemented as discrete
+noise sources at fphy
+s ¼ 16 Hz.
+1. Laser noise
+Laser noise describes the optical phase fluctuations in the
+electromagnetic field of a free-running laser stabilized to a
+cavity (fluctuations in the field amplitude are not included
+here). It is given in the performance model by the allocation
+for the laser frequency stability in units of frequency,
+S
+_Np ðfÞ¼ð 30 HzHz−0.5Þ2
+/C20
+1 þ
+/C18 2 × 10−3 Hz
+f
+/C19 4/C21
+: ðB1Þ
+2. Modulation noise
+Modulation noise describes any mismatch in the phase of
+the modulation sidebands (transmitted to the distance
+optical bench) and the pilot tone (used as a local timing
+reference) [27].
+Both the 2.4 GHz and the 2.401 GHz sideband signals
+used for modulation are generated from the local USO. The
+pilot tone is derived from the electrical 2.4 GHz signal
+using a series of low-noise frequency dividers. The optical
+modulation is performed using an electro-optical modulator
+(EOM) followed by a fiber amplifier.
+The fiber amplifier is the dominating part for the 2.4 GHz
+signal [27]. We fit a rough model to the blue curve in
+Fig. (5.13) of Ref. [27] to obtain a timing jitter power
+spectral density of
+S
+MðfÞ¼ð 10−14 sH z−0.5Þ2
+/C20
+1 þ
+/C18 1.5 × 10−2 Hz
+f
+/C19 2/C21
+:
+ðB2Þ
+Note that the blue curve used for the fit corresponds to a
+1 W fiber amplifier, which allows for lower noise levels
+than the more recent measurements cited in [32] for a 2 W
+9Some noise sources do not match the CBE given in latest
+performance model, and we plan to update them as soon as
+possible to reflect the currently expected LISA performance.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-25
+--- PAGE 26 ---
+amplifier. This noise is therefore underestimated in the
+current version of the simulation.
+For the 2.401 GHz signal, we expect a higher noise
+level due to the electrical conversion chain, which can
+no longer be realized by simple frequency dividers.
+Following [32], we model this by increasing the modu-
+lation noise in the right-hand side optical benches by a
+factor 10.
+3. Test-mass acceleration noise
+Test-mass acceleration noise describes the optical path
+length variations due to the test-mass motion with respect to
+its nominal position inside its housing.
+It is given in the performance model by the allocation
+value for the single test-mass acceleration noise in accel-
+eration units. We include an extra factor 2 in order to
+account for the beam reflection onto the test mass, and
+neglect the high-frequency component because it is smaller
+than the optical metrology system (OMS) displacement
+noise (see below). Moreover, we whiten the noise at below
+10
+−4 Hz to prevent numerical overflow. We get
+SNδ ðfÞ¼ð 2 × 2.4 × 10−15 ms −2 Hz−0.5Þ2
+×
+/C20
+1 þ
+/C18 0.4 × 10−3 Hz
+f
+/C19 2/C21
+: ðB3Þ
+Note that this is an this is an out-of-loop value, ignoring
+the coupling of test mass to spacecraft motion introduced
+by DFACS.
+4. Backlink noise
+Beams are transmitted between adjacent optical benches
+using optical fibres. During this transmission, the beams
+can pick up an additional phase noise term. We model only
+the nonreciprocal noise terms, i.e., the difference between
+the phase shift of a beam propagating from optical bench ij
+to ik vs that of the beam propagating from ik to ij.
+Backlink noise is given in the performance model by the
+allocation for the reference backlink in displacement,
+S
+Nbl ðfÞ¼ð 3 × 10−12mH z−0.5Þ2
+×
+/C20
+1 þ
+/C18 2 × 10−3 Hz
+f
+/C19 4/C21
+: ðB4Þ
+We use the same value for the TMIs and RFIs.
+5. Readout noise
+We summarize as readout noise the equivalent positional
+readout error due to technical noise sources, such as shot noise.
+The OMS displacement noise is given in the performance
+model by the allocation value for the overall displacement
+long-arm, test-mass, and reference noise entries; in terms of
+displacement,
+10
+SNro ðfÞ¼ A2
+/C20
+1 þ
+/C18 2 × 10−3 Hz
+f
+/C19 4/C21
+; ðB5Þ
+where A ¼ 6.35 × 10−12 mH z−0.5 for the ISIs, 1.42 ×
+10−12 mH z−0.5 for the TMIs, and 3.32 × 10−12 mH z−0.5
+for the RFIs.
+The performance model does not give values for the
+sideband beatnotes. We approximate them using ϵ ¼ 0.15
+TABLE III. Summary of the conventional notations used in this paper.
+Symbol Description
+⬚tðτÞ Quantity expressed in the barycentric coordinate time (TCB) (global time frame)
+⬚τi ðτÞ Quantity expressed in the spacecraft proper time (TPS) i (related to t by relativistic corrections)
+⬚ˆτi ðτÞ Quantity expressed in the clock time on board spacecraft i (related to τi by instrumental imperfections)
+_⬚ or d
+dτ Time derivative of quantity (in the specified time frame)
+⬚i Quantity related to spacecraft i
+⬚ij Quantity related to MOSA ij
+⬚A←B Quantity measured on A propagated from B
+⬚PD Quantity related to a generic photodetector (no indices)
+⬚c Quantity related to the main carrier
+⬚m or ⬚m Quantity related to the phase-modulation signal
+⬚sb or ⬚sbþ Quantity related to the upper sideband
+⬚sb− Quantity related to the lower sideband
+⬚o Large out-of-band component of a quantity (offsets or drifts)
+⬚ϵ Small in-band component of a quantity (fluctuations)
+10The overall displacement noise in the performance model
+summarizes multiple noise sources, some of which are already
+accounted for independently in this model. The values for the
+OMS displacement noise are therefore overestimates.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-26
+--- PAGE 27 ---
+instead of 0.85 in the shot noise formula to account for the
+lower power level. This yields A ¼ 1.25 × 10−11 mH z−0.5
+for the ISIs, and 7.90 × 10−12 mH z−0.5 for the RFIs.
+6. Optical bench path-length noise
+Optical bench path-length noise summarizes different
+optical path length noises due to, for example, jitters of
+optical components in the path of the different beams.
+Optical bench path length noise in terms of displacement
+is given by the performance model as
+S
+Nob ðfÞ¼ A2; ðB6Þ
+where A ¼ 4.24 × 10−12mH z−0.5 for local beams in TMIs
+and 2 × 10−12 mH z−0.5 for local beams in RFIs.
+TABLE IV . Symbols for quantities used in this model alongside the units used in the simulation.
+Symbol Unit Description
+c ms −1 Speed of light in a vacuum
+ν0 Hz Optical frequency of the lasers (281.6 THz)
+Φij Cycles Total phase of local beam at laser source ij
+νij Hz Total frequency of local beam at laser source ij
+Oij Hz Carrier frequency offset of local beam at laser source ij
+pij Cycles Carrier phase fluctuations of local beam at laser source ij
+Φij;m Cycles Total phase of modulating signal on MOSA ij
+νij;m Cycles Total frequency of modulating signal on MOSA ij
+νm
+ij Hz Nominal frequency of the modulating signal on MOSA ij
+Φij←ji Cycles Total phase of beam ij propagated to MOSA ji
+νij←ji Hz Total frequency of beam ij propagated to MOSA ji
+Φifoij ←kl Cycles Total phase of the beam kl propagated to photodetector ifo (isi, rfi, or tmi)
+νifoij ←kl Hz Total frequency of the beam kl propagated to photodetector ifo (isi, rfi, or tmi)
+Φifoij Cycles Optical beatnote total phase of ifo (isi, rfi, or tmi)
+νifoij Hz Optical beatnote frequency of ifo (isi, rfi, or tmi)
+ˆττi
+i s Instrumental clock time on board spacecraft i as a function of the TPS
+δˆτi s Deviations of instrumental clock time on board spacecraft i from TPS i
+τˆτi
+i s TPS of spacecraft i as a function of instrumental clock time on board spacecraft i
+F /C1/C1/C1 Filter operator, modeling the filtering and decimation stages from 16 Hz to 4 Hz
+Ti /C1/C1/C1 Phase timestamping operator, transforming a phase quantity from TPS i to instrumental clock time i
+_Ti /C1/C1/C1 Frequency timestamping operator, transforming a frequency quantity from TPS i to instrumental clock time i
+Dij /C1/C1/C1 Delay operator, time-shifting a phase quantity by dij
+_Dij /C1/C1/C1 Doppler-delay operator, time-shifting a frequency quantity by dij (including Doppler corrections)
+aij Hz Shorthand notation for the optical beatnote frequency offsets in the ISI ij
+bij Hz Shorthand notation for the optical beatnote frequency offsets in the RFI and TMI ij
+ifoij Hz Frequency readout of the ifo (isi, rfi, or tmi)
+qi s Noise of instrumental clock on board spacecraft i with respect to TPS
+Mij s Modulation noise on MOSA ij
+Nob
+ifoij ←kl s Noise of beam kl propagated to ifo (isi, rfi, or tmi) due to optical path length variations on the optical bench
+Nro
+ifoij
+s Readout noise in ifo (isi, rfi, or tmi)
+Nbl
+ifoij
+s Backlink noise in ifo (rfi or tmi)
+Nδ
+ij s Test-mass displacement noise
+NR
+ij s Ranging noise
+dij s Proper pseudo-range (PPR) as the difference of TPSs i (at reception) and j (at emission)
+Rij s Measured pseudo-range (MPR) ij as the difference of clock times i (at reception) and j (at emission)
+Hij s Integrated fluctuations of the PPR ij due to gravitational waves
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-27
+--- PAGE 28 ---
+7. Ranging noise
+Pseudoranging is performed by correlating local and
+distant PRN signals, cf. Sec. VII. Ranging noise describes
+the imperfection of the overall ranging measurement
+scheme in a single link due to technical noise sources.
+Note that this does not include any noise appearing in the
+pseudorange itself, such as clock noise or changes in the
+optical path length between the spacecraft.
+Pseudoranging is given by an ad hoc model, combining a
+systematic bias N
+R;o
+i and a zero-mean stochastic Gaussian
+white noise NR;ϵ
+i ðτiÞ,
+NR
+i ðτiÞ¼ NR;o
+i þ NR;ϵ
+i ðτiÞ; ðB7Þ
+with default values of SNR;ϵ ¼ 0.9 mH z−0.5 and NR;o
+i ¼ 0s.
+8. Clock noise
+USOs on each spacecraft act as central time references
+for all onboard systems. As described in Sec. IV,w e
+actually use the pilot tone as the timing reference for all
+phasemeter measurements. Clock noise here models any
+deviations of these pilot tones from the corresponding
+spacecraft proper time (TPS).
+Clock noise is given by the model described in [32],
+expressed in terms of fractional frequency deviations as the
+sum of a random jitter, and constant deterministic fre-
+quency offset, linear drift, and quadratic drift,
+_q
+iðτÞ¼ _Nq
+i ðτÞþ y0;i þ y1;iτ þ y2;iτ2; ðB8Þ
+_Nq
+i ðτÞ is a random jitter, generated as a flicker noise with a
+PSD between 10−5 Hz and fphy
+s =2 ¼ 8 Hz given by
+S _Nq
+i
+ðfÞ¼ð 6.32 × 10−14Þ2f−1; ðB9Þ
+The deterministic coefficients are
+y0 ≈ 5 × 10−7 ss −1; ðB10Þ
+y1 ≈ 1.6 × 10−14 ss −2; ðB11Þ
+y2 ≈ 9 × 10−23 ss −3: ðB12Þ
+These values should be seen as orders of magnitude, and
+will be different for all three USOs.
+APPENDIX C: MAGNITUDE OF _ν
+To estimate the order of magnitude of the term _νo
+AH12ðτÞ
+we neglected compared to the term νo
+A _H12ðτÞ we included,
+we can observe the rate of change in the example frequency
+plan presented in Fig. 15. This is plotted in Fig. 15.A sw e
+can see, we have _νo
+A < 3 Hz s−1 for the whole 4-year
+duration. On the other hand, νo
+A is of the order of
+10 MHz. We consider both νo
+A and _νo
+A as constant scaling
+factors for this estimate.
+Note that H12ðτÞ and _H12ðτÞ are noise terms that we can
+evaluate in the frequency domain. We have
+F ½ _H12/C138ð fÞ¼ 2πf × F ½H12/C138ð fÞ: ðC1Þ
+The usual LISA measurement band extends from 10−4 Hz
+to 1 Hz, such that even at the lower limit of 10−4 Hz, we
+have
+νo
+AF ½ _H12/C138ð fÞ ≈ 104 Hz s−1 × F ½H12/C138ð fÞ
+≫ _νo
+AF ½H12/C138ð fÞ ≈ 104 Hz s−1 × F ½H12/C138ð tÞ:
+ðC2Þ
+Note that the term νo
+A _H12ðτÞ is already a very small
+correction to the dominant term ν0 _H12ðτÞ, such that we can
+safely neglect these additional terms.
+APPENDIX D: DEFAULT IMPLEMENTATION
+OF THE ANTIALIASING FILTER
+By default, the antialiasing filter is designed from a
+Kaiser windowing function, with a transition band that
+extends from 1.1 Hz to 2.9 Hz, and minimum attenuation
+above 2.9 Hz of 240 dB. Note that the filter transition band
+extends above the Nyquist frequency, such that there will
+be a significant amount of aliasing during downsampling,
+as depicted in Fig. 16. However, since aliasing happens by
+reflection across the Nyquist frequency, any noise in the
+band ½f
+meass =2;f meass − 1 Hz/C138 will be aliased into the band
+½1 Hz;f meass =2/C138 , such that it stays outside our measurement
+band of ½10−4 Hz; 1 Hz/C138 .
+Analytically, we model this digital filter with the
+continuous, linear filter operator F, which is applied to
+the beatnote frequency measurements. In the frequency
+domain, this is equivalent to multiplying our signals by
+the filter transfer function F ½F/C138 , pictured in Fig. 16 and
+given by
+FIG. 15. Magnitude of beatnote frequency derivatives for all
+nine beatnotes in the example frequency plan. Data provided
+by G. Heinzel.
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-28
+--- PAGE 29 ---
+F ½F/C138ð ω Þ¼
+XN
+k¼0
+cke−iω k=fphy
+s ; ðD1Þ
+where ck are the filter coefficients.
+APPENDIX E: EXAMPLE SIMULATION
+CODE SNIPPET
+We give here an example simulation and processing
+code snippet for a simple instrumental setup and minimal
+processing. The simulation duration is fixed to 10 days.
+We inject the gravitational-wave signal of one of the
+strongest verification binaries expected in the LISA [44],
+as described in Sec. IX A. Note that the signal amplitude is
+rescaled such that the cumulated SNR over the simulation
+duration matches the full expected 4-year SNR. The
+relative frequency shifts induced by the gravitational-wave
+strain on the six LISA links are computed using
+LISA GW
+Response 2.1.2 [49].
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import numpy as np
+import matplotlib.pyplot as
+plt
+import h5py
+import scipy
+from lisagwresponse import VerificationBinary
+from lisainstrument
+import Instrument
+from pytdi import Data
+from pytdi.michelson import X2, Y2, Z2
+# Use a
+standard set of Keplerian orbits
+# These are provided by LISA Orbits
+(Table continued)
+(Continued)
+orbit_file =
+'keplerian-orbits.h5'
+with h5py.File(orbit_file) as f:
+orbits_t0 = f.attrs['t0']
+#
+Simulation runs for 3 days at 4 Hz,
+# and starts 10 s after the orbit file
+dt = 0.25 # s
+fs = 1
+/d t#H z
+duration = 60 * 60 * 24 * 3 # s
+size = duration * fs # samples
+t0 = orbits_t0 + 10 #
+s
+# Compute link responses to signal
+source = VerificationBinary(
+period=569.4,
+distance=2089,
+masses=(0.8, 0.117),
+glong=57.7281,
+glat=6.4006,
+iota=60 *
+(np.pi / 180),
+orbits=orbit_file,
+size=size,
+dt=dt,
+t0=t0,
+)
+# Plot and write
+the link responses to
+disk
+source.plot(source.t[:8000])
+source.write('verification-binary.h5')
+# Define the
+instrumental setup, simulate
+# and write the measurements to disk
+instru = Instrument(
+orbits=orbit_file,
+gws='verification-binary.h5',
+laser_shape='white',
+size=size,
+dt=dt,
+t0=t0,
+)
+instru.disable_all_noises(but='laser')
+instru.write('measurements.h5')
+#
+Compute TDI Michelson channels
+data = Data.from_instrument('measurements.h5')
+(Table continued)
+FIG. 16. Antialiasing filter transfer function magnitude. The
+transition band (gray) is chosen to avoid aliasing into the
+measurement band (blue). Unlike what is often presented,
+the frequency axis uses a linear scale here.
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-29
+--- PAGE 30 ---
+(Continued)
+X2 =
+X2.build(**data.args)(data.measurements)
+Y2 = Y2.build(**data.args)(data.measurements)
+Z2 =
+Z2.build(**data.args)(data.measurements)
+# Plot the TDI Michelson channels
+psd = lambda
+tseries: scipy.signal.welch(
+tseries,
+fs=fs,
+nperseg=2**16,
+window=('kaiser',
+30),
+detrend=None
+)
+freq, X2_psd = psd(X2)
+freq, Y2_psd = psd(Y2)
+freq, Z2_psd =
+(Table continued)
+(Continued)
+psd(Z2)
+plt.loglog(freq, np.sqrt(X2_psd),
+label='X2')
+plt.loglog(freq, np.sqrt(Y2_psd),
+label='Y2')
+plt.loglog(freq, np.sqrt(Z2_psd), label='Z2')
+plt.xlabel('Frequency
+[Hz]')
+plt.ylabel('ASD [Hz/, Hz$^{-1/2}$]')
+plt.legend()
+The instrument and the measurements are computed
+using LISA I nstrument 1.1.1 [38]. The spacecraft follow a set
+of Keplerian orbits with an average constellation arm length
+of 2.5 × 109 m. The locking configuration N1-12 is used.
+Only a white laser frequency noise and the injected signal
+are present in the data, as all other effects are disabled. We
+compute the second-generation Michelson TDI channels
+X
+2, Y2, and Z2 using PyTDI 1.2.1 [47], and plot them.
+[1] B. P . Abbott et al. (LIGO Scientific and Virgo Collabora-
+tions), Observation of Gravitational Waves from a Binary
+Black Hole Merger, Phys. Rev. Lett. 116, 061102 (2016) .
+[2] B. P . Abbott et al. (LIGO Scientific and Virgo Collabora-
+tions), GW151226: Observation of Gravitational Waves
+from a 22-Solar-Mass Binary Black Hole Coalescence,
+Phys. Rev. Lett. 116, 241103 (2016) .
+[3] B. P . Abbott et al. (LIGO Scientific and Virgo Collabora-
+tions), GW170104: Observation of a 50-Solar-Mass Binary
+Black Hole Coalescence at Redshift 0.2, Phys. Rev. Lett.
+118, 221101 (2017) ; 121, 129901(E) (2018) .
+[4] B. P . Abbott et al. (LIGO Scientific and Virgo Collabora-
+tions), GW170608: Observation of a 19-solar-mass
+binary black hole coalescence, Astrophys. J. Lett. 851,
+L35 (2017) .
+[5] B. P . Abbott et al. (LIGO Scientific and Virgo Collabora-
+tions), GW170814: A Three-Detector Observation of Gravi-
+tational Waves from a Binary Black Hole Coalescence,
+Phys. Rev. Lett. 119, 141101 (2017) .
+[6] B. P . Abbott et al. (LIGO Scientific and Virgo Collabora-
+tions), GW170817: Observation of Gravitational Waves
+from a Binary Neutron Star Inspiral, Phys. Rev. Lett.
+119, 161101 (2017) .
+[7] B. P . Abbott et al. (LIGO Scientific and Virgo Collabora-
+tions), GWTC-1: A Gravitational-Wave Transient Catalog
+of Compact Binary Mergers Observed by LIGO and Virgo
+during the First and Second Observing Runs, Phys. Rev. X
+9, 031040 (2019) .
+[8] B. P . Abbott et al. (LIGO Scientific and Virgo Colla-
+borations), GW190425: Observation of a compact binary
+coalescence with total mass ∼3.4M
+⊙, Astrophys. J. Lett.
+892, L3 (2020) .
+[9] R. Abbott (LIGO Scientific and Virgo Collaborations),
+GW190412: Observation of a binary-black-hole coales-
+cence with asymmetric masses, Phys. Rev. D 102, 043015
+(2020).
+[10] R. Abbott et al. (LIGO Scientific and Virgo Collaborations),
+GW190814: Gravitational waves from the coalescence of a
+23 solar mass black hole with a 2.6 solar mass compact
+object, Astrophys. J. Lett. 896, L44 (2020) .
+[11] R. Abbott et al. (LIGO Scientific and Virgo Collaborations),
+GW190521: A Binary Black Hole Merger with a Total Mass
+of 150M
+⊙, Phys. Rev. Lett. 125, 101102 (2020) .
+[12] R. Abbott et al. (LIGO Scientific and Virgo Collaborations),
+GWTC-2: Compact Binary Coalescences Observed by
+LIGO and Virgo During the First Half of the Third
+Observing Run, Phys. Rev. X 11, 021053 (2021) .
+[13] R. Abbott et al. (LIGO Scientific and Virgo Collaborations),
+GWTC-2.1: Deep extended catalog of compact binary
+coalescences observed by LIGO and Virgo during the first
+half of the third observing run, arXiv:2108.01045.
+[14] R. Abbott et al. (LIGO Scientific, VIRGO, and KAGRA
+Collaborations), Observation of gravitational waves from
+two neutron star –black hole coalescences, Astrophys. J.
+Lett. 915, L5 (2021) .
+[15] R. Abbott et al. (LIGO Scientific, VIRGO, and KAGRA
+Collaborations), GWTC-3: Compact binary coalescences
+observed by LIGO and Virgo during the second part of the
+third observing run, arXiv:2111.03606.
+[16] P . Amaro-Seoane et al. (LISA Collaboration), Laser inter-
+ferometer space antenna, arXiv:1702.00786.
+[17] N. J. Cornish and R. W. Hellings, The effects of orbital
+motion on LISA time delay interferometry, Classical Quan-
+tum Gravity 20, 4851 (2003) .
+JEAN-BAPTISTE BA YLE and OLAF HARTWIG PHYS. REV . D 107, 083019 (2023)
+083019-30
+--- PAGE 31 ---
+[18] L. J. Rubbo, N. J. Cornish, and O. Poujade, Forward
+modeling of space borne gravitational wave detectors, Phys.
+Rev. D 69, 082003 (2004) .
+[19] M. V allisneri, Synthetic LISA: Simulating time delay inter-
+ferometry in a model LISA, Phys. Rev. D 71, 022001
+(2005).
+[20] M. Otto, Time-delay interferometry simulations for the
+laser interferometer space antenna, Ph.D. thesis, Leibniz
+University, Hannover, 2015.
+[21] A. Petiteau, G. Auger, H. Halloin, O. Jeannin, E. Plagnol, S.
+Pireaux, T. Regimbau, and J.-Y . Vinet,
+LISACode: A scientific
+simulator of LISA, Phys. Rev. D 77, 023002 (2008) .
+[22] O. Hartwig and J.-B. Bayle, Clock-Jitter reduction in LISA
+time-delay interferometry combinations, Phys. Rev. D 103,
+123027 (2021) .
+[23] J.-B. Bayle, O. Hartwig, and M. Staab, Adapting time-delay
+interferometry for LISA data in frequency, Phys. Rev. D
+104, 023006 (2021) .
+[24] J.-B. Bayle, A. Hees, M. Lilley, and C. Le Poncin-Lafitte,
+LISA O rbits (2022).
+[25] A. Wolski, Theory of electromagnetic fields, in CERN
+Accelerator School: Course on RF for Accelerators (2011).
+[26] L. Wissel, A. Wittchen, T. S. Schwarze, M. Hewitson, G.
+Heinzel, and H. Halloin, Relative-Intensity-Noise Coupling
+in Heterodyne Interferometers, Phys. Rev. Appl. 17, 024025
+(2022).
+[27] S. Barke, Inter-spacecraft frequency distribution for future
+gravitational wave observatories, Ph.D. thesis, Leibniz
+Univrsity, Hannover, 2015.
+[28] R. Hellings, G. Giampieri, L. Maleki, M. Tinto, K.
+Danzmann, J. Hough, and D. Robertson, Heterodyne laser
+tracking at high Doppler rates, Opt. Commun. 124, 313
+(1996).
+[29] R. W. Hellings, Elimination of Clock Jitter noise in space
+born laser interferometers, Phys. Rev. D 64, 022002 (2001).
+[30] M. Tinto, F. B. Estabrook, and J. W. Armstrong, Time delay
+interferometry for LISA, Phys. Rev. D 65, 082003 (2002) .
+[31] M. Tinto and O. Hartwig, Time-delay interferometry and
+clock-noise calibration, Phys. Rev. D 98, 042003 (2018) .
+[32] O. Hartwig, J.-B. Bayle, M. Staab, A. Hees, M. Lilley, and P .
+Wolf, Time-delay interferometry without clock synchroni-
+zation, Phys. Rev. D 105, 122008 (2022) .
+[33] O. Gerberding, Phase readout for satellite interferometry,
+Ph.D. thesis, Leibniz University, Hannover, 2014.
+[34] G. Heinzel, LISA Consortium internal technical note (2018).
+[35] K. Yamamoto (private communication).
+[36] W. Riley, P . L. U. Time, and F. Division, Handbook of
+Frequency Stability Analysis , NIST Special Publication
+(U.S. Department of Commerce, National Institute of
+Standards and Technology, Washington, 2008).
+[37] J. J. Esteban Delgado, Laser ranging and data communica-
+tion for the laser interferometer space antenna, Ph.D. thesis,
+Leibniz University, Hannover, 2012.
+[38] J.-B. Bayle, O. Hartwig, and M. Staab,
+LISA I nstrument
+(2022).
+[39] C. R. Harris et al. , Array programming with NumPy, Nature
+(London) 585, 357 (2020) .
+[40] P . Virtanen et al. , SciPy 1.0 –Fundamental algorithms for
+scientific computing in Python, Nat. Methods 17, 261 (2020).
+[41] S. Plaszczynski (Planck HFI), Generating long streams of
+1=fα noise, Fluct. Noise Lett. 07, R1 (2007) .
+[42] J.-B. Bayle, Simulation and data analysis for LISA:
+Instrumental modeling, time-delay interferometry, noise-
+reduction performance study, and discrimination of transient
+gravitational signals, Ph.D. thesis, Paris University VII,
+APC, 2019.
+[43] J.-B. Bayle, O. Hartwig, A. Petiteau, and M. Lilley,
+LISA
+Node (2022).
+[44] T. Kupfer, V . Korol, S. Shah, G. Nelemans, T. R. Marsh,
+G. Ramsay, P . J. Groot, D. T. H. Steeghs, and E. M. Rossi,
+LISA verification binaries with updated distances from Gaia
+Data Release 2, Mon. Not. R. Astron. Soc. 480, 302 (2018).
+[45] G. Heinzel (private communication).
+[46] M. Tröbs and G. Heinzel, Improved spectrum estimation
+from digitized time series on a logarithmic frequency axis,
+Measurement 39, 120 (2006) .
+[47] M. Staab, J.-B. Bayle, and O. Hartwig,
+PyTDI (2022).
+[48] J.-B. Bayle, E. Castelli, and N. Korsakova, LISA G litch
+(2022).
+[49] J.-B. Bayle, Q. Baghi, A. Renzini, and M. Le Jeune, LISA
+GW R esponse (2022).
+[50] H. Inchausp´e, M. Hewitson, O. Sauter, and P . Wass, New
+LISA dynamics feedback control scheme: Common-mode
+isolation of test mass control and probes of test-mass
+acceleration, Phys. Rev. D 106, 022006 (2022) .
+[51] S. Paczkowski, R. Giusteri, M. Hewitson, N. Karnesis, E. D.
+Fitzsimons, G. Wanner, and G. Heinzel, Postprocessing
+subtraction of tilt-to-length noise in LISA, Phys. Rev. D
+106, 042005 (2022) .
+[52] LISA Consortium internal technical note (2019).
+UNIFIED MODEL FOR THE LISA MEASUREMENTS AND … PHYS. REV . D 107, 083019 (2023)
+083019-31
